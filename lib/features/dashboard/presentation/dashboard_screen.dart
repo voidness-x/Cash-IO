@@ -17,8 +17,10 @@ import '../../advisory/presentation/financial_advisory_card.dart';
 import '../../savings/presentation/savings_goals_deck.dart';
 import '../../savings/presentation/savings_goal_sheets.dart';
 import '../../../core/services/ledger_search_service.dart';
+import '../../../core/services/update_receiver_service.dart';
 import '../../transactions/presentation/ledger_search_filter_bar.dart';
 import '../../receipts/presentation/receipt_vault_gallery.dart';
+import '../../settings/presentation/update_receiver_sheet.dart';
 import '../../vaults/presentation/vault_switcher_sheet.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -30,17 +32,20 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
-class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProviderStateMixin {
+class _DashboardScreenState extends State<DashboardScreen>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _entranceController;
   late final Animation<double> _fadeAnimation;
   late final Animation<Offset> _slideAnimation;
 
   LedgerFilterCriteria _ledgerCriteria = const LedgerFilterCriteria();
   bool _isSearchExpanded = false;
+  bool _promptedUpdateDialogThisSession = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _entranceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 700),
@@ -60,10 +65,39 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
     ));
 
     _entranceController.forward();
+
+    // Automatically check GitHub Releases for new APK / OTA updates on app launch
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAndPromptGitHubRelease();
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkAndPromptGitHubRelease();
+    }
+  }
+
+  Future<void> _checkAndPromptGitHubRelease() async {
+    final update = await UpdateReceiverService.instance.checkForUpdatesOnStartupOrResume();
+    if (!mounted || update == null || _promptedUpdateDialogThisSession) return;
+    _promptedUpdateDialogThisSession = true;
+    _openOtaUpdateSheet(context);
+  }
+
+  void _openOtaUpdateSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => const UpdateReceiverSheet(),
+    );
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _entranceController.dispose();
     super.dispose();
   }
@@ -71,10 +105,11 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     final repo = VaultRepository.instance;
+    final otaService = UpdateReceiverService.instance;
     final tokens = context.tokens;
 
     return ListenableBuilder(
-      listenable: repo,
+      listenable: Listenable.merge([repo, otaService]),
       builder: (context, _) {
         final accounts = repo.accounts;
         final transactions = repo.transactions;
@@ -169,6 +204,35 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
                 },
               ),
               IconButton(
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(
+                      Icons.system_update_alt_rounded,
+                      color: otaService.availableUpdate != null ? tokens.accent : null,
+                    ),
+                    if (otaService.availableUpdate != null)
+                      Positioned(
+                        right: -2,
+                        top: -2,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: tokens.accent,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                tooltip: 'OTA Updates & Rollback',
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  _openOtaUpdateSheet(context);
+                },
+              ),
+              IconButton(
                 icon: const Icon(Icons.person_outline),
                 tooltip: 'Profiles & Vaults',
                 onPressed: () {
@@ -190,6 +254,67 @@ class _DashboardScreenState extends State<DashboardScreen> with SingleTickerProv
               child: ListView(
                 padding: EdgeInsets.all(tokens.space4),
                 children: [
+                  // 0. LIVE GITHUB RELEASE UPDATE BANNER (Auto-triggered when new release ships)
+                  if (otaService.hasUnreadUpdateBanner && otaService.availableUpdate != null) ...[
+                    Container(
+                      padding: EdgeInsets.all(tokens.space4),
+                      decoration: BoxDecoration(
+                        color: tokens.accent.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(tokens.radiusMd),
+                        border: Border.all(color: tokens.accent.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.system_update_rounded, color: tokens.accent, size: 22),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'UPDATE AVAILABLE • v${otaService.availableUpdate!.version}',
+                                  style: GoogleFonts.spaceGrotesk(
+                                    color: tokens.accent,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.8,
+                                  ),
+                                ),
+                                Text(
+                                  otaService.availableUpdate!.title,
+                                  style: GoogleFonts.mukta(
+                                    color: tokens.textPrimary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: tokens.accent,
+                              foregroundColor: Colors.black,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                            onPressed: () => _openOtaUpdateSheet(context),
+                            child: Text(
+                              'Update',
+                              style: GoogleFonts.spaceGrotesk(fontSize: 12, fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(Icons.close, size: 16, color: tokens.textTertiary),
+                            visualDensity: VisualDensity.compact,
+                            onPressed: otaService.dismissUpdateBanner,
+                          ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(height: tokens.space4),
+                  ],
+
                   // 1. HERO CURRENT CASH TERMINAL DECK
                   StaggeredEntrance(
                     index: 0,

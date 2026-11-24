@@ -158,5 +158,52 @@ void main() {
       expect(repo.transactions.length, 1);
       expect(repo.transactions.first.description, 'Original v3.0 Entry');
     });
+
+    test('tryParseJson parses both signed manifest.json and GitHub Releases API JSON with APK/IPA assets', () {
+      final manifest = AppUpdateManifest.tryParseJson({
+        'version': '3.1.0',
+        'build_number': 30100,
+        'release_date': '2026-11-25',
+        'title': 'Cash-IO v3.1.0 Mobile Release',
+        'changelog': ['Android self-updater'],
+        'sha256_checksum': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        'download_url': 'https://github.com/voidness-x/Cash-IO/releases/download/v3.1.0/cashio-v3.1.0-android.apk',
+        'apk_download_url': 'https://github.com/voidness-x/Cash-IO/releases/download/v3.1.0/cashio-v3.1.0-android.apk',
+        'apk_sha256_checksum': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        'ios_download_url': 'https://github.com/voidness-x/Cash-IO/releases/download/v3.1.0/cashio-v3.1.0-ios-unsigned.ipa',
+      });
+      expect(manifest, isNotNull);
+      expect(manifest!.version, '3.1.0');
+      expect(manifest.buildNumber, 30100);
+      expect(manifest.effectiveApkUrl.endsWith('cashio-v3.1.0-android.apk'), isTrue);
+      expect(manifest.effectiveIosUrl.endsWith('cashio-v3.1.0-ios-unsigned.ipa'), isTrue);
+
+      final ghApiManifest = AppUpdateManifest.tryParseJson({
+        'tag_name': 'v3.2.5',
+        'name': 'Cash-IO v3.2.5',
+        'published_at': '2026-12-01T10:00:00Z',
+        'html_url': 'https://github.com/voidness-x/Cash-IO/releases/tag/v3.2.5',
+        'body': '- Faster Argon2id unlock\n- New multi-currency chart',
+        'assets': [
+          {
+            'name': 'cashio-v3.2.5-android.apk',
+            'browser_download_url':
+                'https://github.com/voidness-x/Cash-IO/releases/download/v3.2.5/cashio-v3.2.5-android.apk',
+            'digest': 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+          },
+          {
+            'name': 'cashio-v3.2.5-ios-unsigned.ipa',
+            'browser_download_url':
+                'https://github.com/voidness-x/Cash-IO/releases/download/v3.2.5/cashio-v3.2.5-ios-unsigned.ipa',
+          },
+        ],
+      });
+      expect(ghApiManifest, isNotNull);
+      expect(ghApiManifest!.version, '3.2.5');
+      expect(ghApiManifest.buildNumber, 30205);
+      expect(ghApiManifest.changelog.length, 2);
+      expect(ghApiManifest.effectiveApkSha256.length, 64);
+      expect(UpdateReceiverService.compareSemver('3.2.5', '3.1.0'), greaterThan(0));
+    });
   });
 }

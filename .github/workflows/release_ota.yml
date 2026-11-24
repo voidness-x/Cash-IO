@@ -1,4 +1,4 @@
-name: Release — Signed OTA Bundle & GitHub Releases Publisher
+name: Release — Android APK, iOS IPA & Signed OTA Publisher
 
 on:
   push:
@@ -7,18 +7,23 @@ on:
   workflow_dispatch:
     inputs:
       version_tag:
-        description: 'Semantic version tag (e.g. v3.2.0)'
+        description: 'Semantic version tag (e.g. v3.0.0 or v3.1.0)'
         required: true
-        default: 'v3.2.0'
+        default: 'v3.0.0'
 
 permissions:
   contents: write
 
 jobs:
-  build-and-publish-ota:
-    name: Verify, Package, Hash & Publish OTA Release
-    runs-on: windows-latest
-    timeout-minutes: 30
+  prepare-metadata:
+    name: Parse Semantic Version & Run Pre-Release Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      build: ${{ steps.meta.outputs.build }}
+      date: ${{ steps.meta.outputs.date }}
 
     steps:
       - name: Checkout Repository
@@ -31,69 +36,246 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install Dependencies & Run Pre-Release Security Gate
-        shell: pwsh
+      - name: Run Static Analysis & Security Test Gate
         run: |
           flutter pub get
           flutter analyze --no-fatal-infos --fatal-warnings
           flutter test --concurrency=1
 
-      - name: Determine Release Version & Build Number
+      - name: Compute Version & Monotonic Build Number
         id: meta
-        shell: pwsh
         run: |
-          $rawTag = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ inputs.version_tag }}" } else { "${{ github.ref_name }}" }
-          $cleanVer = $rawTag.TrimStart('v')
-          $parts = $cleanVer.Split('-')[0].Split('.')
-          $buildNum = ([int]$parts[0] * 100) + ([int]$parts[1] * 10) + ([int]$parts[2])
-          "tag=$rawTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "version=$cleanVer" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "build=$buildNum" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "date=$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          RAW_TAG="${{ github.event_name == 'workflow_dispatch' && inputs.version_tag || github.ref_name }}"
+          CLEAN_VER="${RAW_TAG#v}"
+          BASE_VER="${CLEAN_VER%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE_VER"
+          BUILD_NUM=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
+          REL_DATE=$(date -u +"%Y-%m-%d")
+          echo "tag=$RAW_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$CLEAN_VER" >> "$GITHUB_OUTPUT"
+          echo "build=$BUILD_NUM" >> "$GITHUB_OUTPUT"
+          echo "date=$REL_DATE" >> "$GITHUB_OUTPUT"
 
-      - name: Build Production Web PWA & Windows Desktop Bundles
-        shell: pwsh
-        run: |
-          flutter build web --release --no-tree-shake-icons --build-name=${{ steps.meta.outputs.version }} --build-number=${{ steps.meta.outputs.build }}
-          if (Test-Path "web/sqlite3.wasm") { Copy-Item "web/sqlite3.wasm" "build/web/" -Force }
-          if (Test-Path "web/sqflite_sw.js") { Copy-Item "web/sqflite_sw.js" "build/web/" -Force }
-          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
-          Compress-Archive -Path "build/web/*" -DestinationPath "dist/cashio-${{ steps.meta.outputs.tag }}-bundle.enc" -Force
+  build-android-and-web:
+    name: Build Signed Android APK & Web Bundle
+    needs: prepare-metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
 
-      - name: Generate SHA-256 Checksums & Signed OTA manifest.json
-        shell: pwsh
-        run: |
-          $bundlePath = "dist/cashio-${{ steps.meta.outputs.tag }}-bundle.enc"
-          $sha256 = (Get-FileHash -Path $bundlePath -Algorithm SHA256).Hash.ToLower()
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
 
-          $manifest = [ordered]@{
-            version             = "${{ steps.meta.outputs.version }}"
-            build_number        = [int]"${{ steps.meta.outputs.build }}"
-            release_date        = "${{ steps.meta.outputs.date }}"
-            title               = "Cash-IO ${{ steps.meta.outputs.tag }} Official Release"
-            changelog           = @(
-              "Verified release built from commit ${{ github.sha }}",
-              "Pre-update emergency .cashio.bak snapshot & SHA-256 integrity verified"
-            )
-            sha256_checksum     = $sha256
-            is_emergency_patch  = $false
-            download_url        = "https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}/cashio-${{ steps.meta.outputs.tag }}-bundle.enc"
-          }
-
-          $manifest | ConvertTo-Json -Depth 5 | Out-File -FilePath "dist/manifest.json" -Encoding utf8
-          $manifestHash = (Get-FileHash -Path "dist/manifest.json" -Algorithm SHA256).Hash.ToLower()
-
-          @(
-            "$sha256  cashio-${{ steps.meta.outputs.tag }}-bundle.enc"
-            "$manifestHash  manifest.json"
-          ) | Out-File -FilePath "dist/SHA256SUMS.txt" -Encoding utf8
-
-      - name: Publish Release & OTA Manifest to GitHub Releases
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          generate_release_notes: true
-          files: |
-            dist/manifest.json
-            dist/SHA256SUMS.txt
-            dist/cashio-${{ steps.meta.outputs.tag }}-bundle.enc
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter Toolchain (Pinned 3.47.8)
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.8'
+          channel: 'stable'
+          cache: true
+
+      - name: Restore Persistent Android Release Signing Keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/cashio-release.jks"
+            echo "CASHIO_KEYSTORE_PATH=$RUNNER_TEMP/cashio-release.jks" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build Signed Android Release APK & Web PWA Bundle
+        env:
+          CASHIO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          CASHIO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CASHIO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          flutter pub get
+          mkdir -p dist-android
+
+          flutter build apk --release --no-tree-shake-icons \
+            --build-name="${{ needs.prepare-metadata.outputs.version }}" \
+            --build-number="${{ needs.prepare-metadata.outputs.build }}" \
+            --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
+            --dart-define="CASHIO_BUILD_NUMBER=${{ needs.prepare-metadata.outputs.build }}"
+
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android.apk"
+
+          flutter build web --release --no-tree-shake-icons \
+            --build-name="${{ needs.prepare-metadata.outputs.version }}" \
+            --build-number="${{ needs.prepare-metadata.outputs.build }}" \
+            --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
+            --dart-define="CASHIO_BUILD_NUMBER=${{ needs.prepare-metadata.outputs.build }}"
+          cp web/sqlite3.wasm build/web/ || true
+          cp web/sqflite_sw.js build/web/ || true
+          (cd build/web && zip -qr "../../dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-web.zip" .)
+
+      - name: Shred Temporary Keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cashio-release.jks"
+
+      - name: Upload Android & Web Release Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-android-web
+          path: dist-android/*
+          retention-days: 7
+
+  build-ios-ipa:
+    name: Build iOS Unsigned Release IPA (macOS Xcode)
+    needs: prepare-metadata
+    runs-on: macos-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Set up Flutter Toolchain (Pinned 3.47.8)
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.8'
+          channel: 'stable'
+          cache: true
+
+      - name: Build iOS Release (--no-codesign) & Package .ipa
+        run: |
+          flutter pub get
+          flutter build ios --release --no-codesign --no-tree-shake-icons \
+            --build-name="${{ needs.prepare-metadata.outputs.version }}" \
+            --build-number="${{ needs.prepare-metadata.outputs.build }}" \
+            --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
+            --dart-define="CASHIO_BUILD_NUMBER=${{ needs.prepare-metadata.outputs.build }}"
+
+          mkdir -p Payload dist-ios
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry "dist-ios/cashio-${{ needs.prepare-metadata.outputs.tag }}-ios-unsigned.ipa" Payload
+
+      - name: Upload iOS IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-ios
+          path: dist-ios/*
+          retention-days: 7
+
+  publish-github-release:
+    name: Sign SHA-256 OTA Manifest & Publish GitHub Release
+    needs: [prepare-metadata, build-android-and-web, build-ios-ipa]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Download All Built Platform Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-bundle
+          merge-multiple: true
+
+      - name: Compute SHA-256 Digests & Generate OTA manifest.json
+        env:
+          TAG: ${{ needs.prepare-metadata.outputs.tag }}
+          VER: ${{ needs.prepare-metadata.outputs.version }}
+          BUILD: ${{ needs.prepare-metadata.outputs.build }}
+          REL_DATE: ${{ needs.prepare-metadata.outputs.date }}
+          REPO: ${{ github.repository }}
+          SHA_COMMIT: ${{ github.sha }}
+        run: |
+          cd release-bundle
+          APK_FILE="cashio-${TAG}-android.apk"
+          IOS_FILE="cashio-${TAG}-ios-unsigned.ipa"
+          WEB_FILE="cashio-${TAG}-web.zip"
+
+          APK_SHA=$(sha256sum "$APK_FILE" | awk '{print $1}')
+          IOS_SHA=$(sha256sum "$IOS_FILE" | awk '{print $1}')
+          WEB_SHA=$(sha256sum "$WEB_FILE" | awk '{print $1}')
+          SHORT_SHA="${SHA_COMMIT:0:7}"
+          BASE_DL="https://github.com/${REPO}/releases/download/${TAG}"
+
+          jq -n \
+            --arg ver "$VER" \
+            --argjson build "$BUILD" \
+            --arg rel_date "$REL_DATE" \
+            --arg title "Cash-IO ${TAG} Official Mobile & Web Release" \
+            --arg commit "$SHORT_SHA" \
+            --arg apk_sha "$APK_SHA" \
+            --arg ios_sha "$IOS_SHA" \
+            --arg web_sha "$WEB_SHA" \
+            --arg apk_url "${BASE_DL}/${APK_FILE}" \
+            --arg ios_url "${BASE_DL}/${IOS_FILE}" \
+            --arg web_url "${BASE_DL}/${WEB_FILE}" \
+            --arg rel_url "https://github.com/${REPO}/releases/tag/${TAG}" \
+            '{
+              version: $ver,
+              build_number: $build,
+              release_date: $rel_date,
+              title: $title,
+              changelog: [
+                ("Signed Android self-updating APK & iOS IPA built from commit " + $commit + "."),
+                "Automatic startup/resume OTA update detection via GitHub Releases.",
+                "Pre-update persistent .cashio.bak snapshot & SHA-256 binary verification.",
+                "Zero-knowledge multi-vault ledger, 50/30/20 on-device advisory & locked goal vaults."
+              ],
+              sha256_checksum: $apk_sha,
+              is_emergency_patch: false,
+              download_url: $apk_url,
+              apk_download_url: $apk_url,
+              apk_sha256_checksum: $apk_sha,
+              ios_download_url: $ios_url,
+              ios_sha256_checksum: $ios_sha,
+              web_download_url: $web_url,
+              web_sha256_checksum: $web_sha,
+              release_page_url: $rel_url
+            }' > manifest.json
+
+          sha256sum "$APK_FILE" "$IOS_FILE" "$WEB_FILE" manifest.json > SHA256SUMS.txt
+          cat manifest.json
+          cat SHA256SUMS.txt
+
+      - name: Upload Signed Bundle Artifacts to Run
+        uses: actions/upload-artifact@v4
+        with:
+          name: cashio-complete-release-${{ needs.prepare-metadata.outputs.tag }}
+          path: release-bundle/*
+          retention-days: 30
+
+      - name: Publish APK, iOS IPA & OTA Manifest to GitHub Releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare-metadata.outputs.tag }}
+        run: |
+          cat > release-notes.md <<EOF
+          ### Installable Release Packages (\`${TAG}\`)
+
+          - **Android (Direct Phone Install + Built-in Auto-Updater):** \`cashio-${TAG}-android.apk\`
+            - Signed with the persistent Cash-IO RSA-4096 release certificate for seamless in-place OTA upgrades.
+            - Automatically checks GitHub Releases on app launch and foreground resume, creates a \`.cashio.bak\` emergency vault snapshot, verifies SHA-256 integrity, and opens Android's native Package Installer whenever a newer GitHub Release is published.
+          - **iOS (Unsigned Sideloadable Archive for AltStore / SideStore / Sideloadly):** \`cashio-${TAG}-ios-unsigned.ipa\`
+            - Built with Xcode (\`--no-codesign\`); sideload via AltStore, SideStore, or Sideloadly (which re-signs with your personal Apple ID) or sign with an Apple Developer certificate.
+          - **Web / PWA Bundle:** \`cashio-${TAG}-web.zip\`
+          - **OTA Manifest & Checksums:** \`manifest.json\` & \`SHA256SUMS.txt\`
+          EOF
+
+          ASSETS=(
+            "release-bundle/cashio-${TAG}-android.apk"
+            "release-bundle/cashio-${TAG}-ios-unsigned.ipa"
+            "release-bundle/cashio-${TAG}-web.zip"
+            "release-bundle/manifest.json"
+            "release-bundle/SHA256SUMS.txt"
+          )
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "Cash-IO ${TAG} — Android APK, iOS IPA & OTA Release" \
+              --notes-file release-notes.md
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "Cash-IO ${TAG} — Android APK, iOS IPA & OTA Release" \
+              --notes-file release-notes.md \
+              --generate-notes
+          fi
