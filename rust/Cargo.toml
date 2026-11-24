@@ -11,7 +11,7 @@ description = "High-performance, zero-knowledge, offline-first accounting and CR
 crate-type = ["cdylib", "staticlib", "lib"]
 
 [dependencies]
-argon2 = "0.5"
+argon2 = "0.6"
 aes-gcm = "0.10"
 bip39 = "2.0"
 zeroize = { version = "1.8", features = ["derive"] }
