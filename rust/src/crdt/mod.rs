@@ -106,8 +106,13 @@ impl CrdtMergeEngine {
                             (local.device_id, remote.device_id)
                         };
 
+                        let now_ms = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_millis() as i64)
+                            .unwrap_or(0);
+
                         audit_records.push(MergeAuditRecord {
-                            timestamp_ms: chrono::Utc::now().timestamp_millis(),
+                            timestamp_ms: now_ms,
                             entity_id: remote.entity_id,
                             entity_type: remote.entity_type,
                             winning_device: winner,
