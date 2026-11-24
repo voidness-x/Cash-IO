@@ -83,7 +83,7 @@ jobs:
           cargo deny check
 
       - name: Google OSV-Scanner (Cross-Ecosystem Lockfile CVE Check)
-        uses: google/osv-scanner-action@v1.9.0
+        uses: google/osv-scanner-action@v2.7.1
         with:
           scan-args: |-
             --lockfile=./pubspec.lock
