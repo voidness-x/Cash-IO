@@ -1,0 +1,38 @@
+name: Bug Report
+description: Report a functional, accounting invariant, or UI defect in Cash-IO
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Defect Summary
+      description: Clear, concise description of the unexpected behavior.
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Target Platform
+      options:
+        - Windows Desktop
+        - Web / PWA
+        - Android
+        - iOS
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to Reproduce
+      placeholder: |
+        1. Unlock vault...
+        2. Navigate to...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: note
+    attributes:
+      label: Privacy Notice
+      value: "NEVER attach unencrypted financial exports, PINs, or 12-word recovery mnemonics to public issues."

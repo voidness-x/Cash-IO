@@ -1,0 +1,98 @@
+name: Release — Signed OTA Bundle & GitHub Releases Publisher
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Semantic version tag (e.g. v3.2.0)'
+        required: true
+        default: 'v3.2.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish-ota:
+    name: Verify, Package, Hash & Publish OTA Release
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter Stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies & Run Pre-Release Security Gate
+        shell: pwsh
+        run: |
+          flutter pub get
+          flutter analyze --fatal-infos --fatal-warnings
+          flutter test --concurrency=1
+
+      - name: Determine Release Version & Build Number
+        id: meta
+        shell: pwsh
+        run: |
+          $rawTag = if ("${{ github.event_name }}" -eq "workflow_dispatch") { "${{ inputs.version_tag }}" } else { "${{ github.ref_name }}" }
+          $cleanVer = $rawTag.TrimStart('v')
+          $parts = $cleanVer.Split('-')[0].Split('.')
+          $buildNum = ([int]$parts[0] * 100) + ([int]$parts[1] * 10) + ([int]$parts[2])
+          "tag=$rawTag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "version=$cleanVer" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "build=$buildNum" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "date=$((Get-Date).ToUniversalTime().ToString('yyyy-MM-dd'))" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Build Production Web PWA & Windows Desktop Bundles
+        shell: pwsh
+        run: |
+          flutter build web --release --no-tree-shake-icons --build-name=${{ steps.meta.outputs.version }} --build-number=${{ steps.meta.outputs.build }}
+          if (Test-Path "web/sqlite3.wasm") { Copy-Item "web/sqlite3.wasm" "build/web/" -Force }
+          if (Test-Path "web/sqflite_sw.js") { Copy-Item "web/sqflite_sw.js" "build/web/" -Force }
+          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
+          Compress-Archive -Path "build/web/*" -DestinationPath "dist/cashio-${{ steps.meta.outputs.tag }}-bundle.enc" -Force
+
+      - name: Generate SHA-256 Checksums & Signed OTA manifest.json
+        shell: pwsh
+        run: |
+          $bundlePath = "dist/cashio-${{ steps.meta.outputs.tag }}-bundle.enc"
+          $sha256 = (Get-FileHash -Path $bundlePath -Algorithm SHA256).Hash.ToLower()
+
+          $manifest = [ordered]@{
+            version             = "${{ steps.meta.outputs.version }}"
+            build_number        = [int]"${{ steps.meta.outputs.build }}"
+            release_date        = "${{ steps.meta.outputs.date }}"
+            title               = "Cash-IO ${{ steps.meta.outputs.tag }} Official Release"
+            changelog           = @(
+              "Verified release built from commit ${{ github.sha }}",
+              "Pre-update emergency .cashio.bak snapshot & SHA-256 integrity verified"
+            )
+            sha256_checksum     = $sha256
+            is_emergency_patch  = $false
+            download_url        = "https://github.com/${{ github.repository }}/releases/download/${{ steps.meta.outputs.tag }}/cashio-${{ steps.meta.outputs.tag }}-bundle.enc"
+          }
+
+          $manifest | ConvertTo-Json -Depth 5 | Out-File -FilePath "dist/manifest.json" -Encoding utf8
+          $manifestHash = (Get-FileHash -Path "dist/manifest.json" -Algorithm SHA256).Hash.ToLower()
+
+          @(
+            "$sha256  cashio-${{ steps.meta.outputs.tag }}-bundle.enc"
+            "$manifestHash  manifest.json"
+          ) | Out-File -FilePath "dist/SHA256SUMS.txt" -Encoding utf8
+
+      - name: Publish Release & OTA Manifest to GitHub Releases
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/manifest.json
+            dist/SHA256SUMS.txt
+            dist/cashio-${{ steps.meta.outputs.tag }}-bundle.enc

@@ -1,0 +1,75 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+Thumbs.db
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Local AI / Editor Tooling (Never commit local agent skills or IDE state)
+.agents/
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Secrets, Keys, Certificates & Signing Credentials (STRICT BLOCK)
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+key.properties
+google-services.json
+GoogleService-Info.plist
+client_secret*.json
+credentials.json
+
+# Cash-IO Runtime Databases, Encrypted Vaults & Snapshots
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.cashio
+*.cashio.bak
+vault_media/
+
+# Flutter / Dart / Pub Build Artifacts
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
+.widget_preview/
+
+# Rust Target Artifacts
+/rust/target/
+
+# Symbolication & Obfuscation Maps
+app.*.symbols
+app.*.map.json
+
+# Android Build Outputs
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/.gradle/
+/android/local.properties

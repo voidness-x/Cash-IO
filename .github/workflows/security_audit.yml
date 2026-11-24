@@ -1,0 +1,131 @@
+name: DevSecOps — Security, SAST, Secrets & Vulnerability Audit
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # Weekly automated zero-day CVE & supply-chain audit (Mondays 02:00 UTC)
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets-and-filesystem-scan:
+    name: Secret Detection (Gitleaks) & Vulnerability Scan (Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Full History
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks Secret & Credential History Scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Trivy Filesystem CVE & Misconfiguration Scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy SARIF Report to GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  supply-chain-and-sbom:
+    name: Dependency CVE Audit (OSV, RustSec, Cargo-Deny) & SBOM
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter Toolchain
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Resolve Dart Dependencies
+        run: |
+          flutter pub get
+          dart pub outdated --no-dev-dependencies || true
+
+      - name: Set up Rust Toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Generate Rust Lockfile & Run RustSec + Cargo-Deny
+        working-directory: ./rust
+        run: |
+          cargo generate-lockfile
+          cargo install --locked cargo-audit cargo-deny
+          cargo audit
+          cargo deny check
+
+      - name: Google OSV-Scanner (Cross-Ecosystem Lockfile CVE Check)
+        uses: google/osv-scanner-action@v1.9.0
+        with:
+          scan-args: |-
+            --lockfile=./pubspec.lock
+            --lockfile=./rust/Cargo.lock
+
+      - name: Generate SPDX Software Bill of Materials (SBOM)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: cashio-sbom.spdx.json
+
+      - name: Upload SBOM Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cashio-sbom
+          path: cashio-sbom.spdx.json
+          retention-days: 30
+
+  adversarial-security-suite:
+    name: OWASP Adversarial Security & Cryptographic Test Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter Toolchain
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Execute Adversarial Security & Rollback Resilience Suites
+        run: |
+          flutter test \
+            test/security_vulnerability_suite_test.dart \
+            test/phase4_security_sync_test.dart \
+            test/phase6c_multi_vault_test.dart \
+            test/phase6d_update_rollback_test.dart \
+            --concurrency=1 --reporter expanded

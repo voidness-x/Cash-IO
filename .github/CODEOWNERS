@@ -1,0 +1,7 @@
+# Default repository owners for mandatory code & security review
+* @voidness-x
+/.github/ @voidness-x
+/lib/core/security/ @voidness-x
+/lib/core/sync/ @voidness-x
+/lib/core/services/update_receiver_service.dart @voidness-x
+/rust/ @voidness-x

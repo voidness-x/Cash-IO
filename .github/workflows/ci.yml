@@ -1,0 +1,89 @@
+name: CI — Build, Lint & Test Matrix
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter-verify:
+    name: Flutter Analyze, Test Matrix & Web Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter Stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Verify Strict Static Analysis (Zero Warnings / Infos)
+        run: flutter analyze --fatal-infos --fatal-warnings
+
+      - name: Execute Full Test Suite (Unit, Invariant, Security & Widget)
+        run: flutter test --concurrency=1 --coverage
+
+      - name: Build Production Web Bundle
+        run: |
+          flutter build web --release --no-tree-shake-icons
+          cp web/sqlite3.wasm build/web/ || true
+          cp web/sqflite_sw.js build/web/ || true
+
+      - name: Upload Web Build & Coverage Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cashio-web-release
+          path: |
+            build/web/
+            coverage/lcov.info
+          retention-days: 14
+
+  rust-core-verify:
+    name: Rust Cryptographic & CRDT Core Verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: ./rust
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust Stable Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo Registry & Target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            rust/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('rust/Cargo.toml') }}
+
+      - name: Lint Rust Core (Clippy Strict)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Execute Rust Cryptographic & Ledger Unit Tests
+        run: cargo test --verbose

@@ -1,0 +1,923 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../../core/theme/tokens.dart';
+import '../../../core/theme/frosted_scaffold.dart';
+import '../../../core/models/finance_models.dart';
+import '../../../core/storage/vault_repository.dart';
+import '../../../core/utils/currency_utils.dart';
+
+class AccountsScreen extends StatefulWidget {
+  const AccountsScreen({super.key});
+
+  @override
+  State<AccountsScreen> createState() => _AccountsScreenState();
+}
+
+class _AccountsScreenState extends State<AccountsScreen> {
+  AccountType? _selectedFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    final repo = VaultRepository.instance;
+    final tokens = context.tokens;
+    final currency = repo.baseCurrency;
+
+    return ListenableBuilder(
+      listenable: repo,
+      builder: (context, _) {
+        final allAccounts = repo.accounts;
+        final assetAccounts = allAccounts.where((a) => a.type == AccountType.asset).toList();
+        final liabilityAccounts = allAccounts.where((a) => a.type == AccountType.liability).toList();
+        final incomeAccounts = allAccounts.where((a) => a.type == AccountType.income).toList();
+        final expenseAccounts = allAccounts.where((a) => a.type == AccountType.expense).toList();
+
+        final totalAssets = repo.totalAssetsCents;
+        final totalLiabilities = repo.totalLiabilitiesCents;
+        final netWorth = totalAssets - totalLiabilities;
+
+        return FrostedScaffold(
+          appBar: AppBar(
+            title: Text(
+              'CHART OF ACCOUNTS',
+              style: GoogleFonts.spaceGrotesk(
+                color: tokens.textPrimary,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.0,
+              ),
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.swap_horiz_rounded),
+                tooltip: 'Transfer Funds',
+                onPressed: assetAccounts.length >= 2
+                    ? () {
+                        HapticFeedback.lightImpact();
+                        _showTransferSheet(context, assetAccounts, currency);
+                      }
+                    : null,
+              ),
+              IconButton(
+                icon: const Icon(Icons.add_circle_outline),
+                tooltip: 'Add Account',
+                onPressed: () {
+                  HapticFeedback.lightImpact();
+                  _showAddAccountSheet(context, currency);
+                },
+              ),
+            ],
+          ),
+          body: ListView(
+            padding: EdgeInsets.all(tokens.space4),
+            children: [
+              // 1. Financial Position Summary Deck
+              StaggeredEntrance(
+                index: 0,
+                child: Container(
+                  padding: EdgeInsets.all(tokens.space5),
+                  decoration: BoxDecoration(
+                    color: tokens.bgSurface,
+                    borderRadius: BorderRadius.circular(tokens.radiusMd),
+                    border: Border.all(color: tokens.borderHairline),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _buildSummaryColumn(
+                            'LIQUID ASSETS',
+                            CurrencyUtils.format(totalAssets, currency: currency),
+                            tokens.statusIncome,
+                            tokens.textSecondary,
+                            Icons.account_balance_wallet_outlined,
+                          ),
+                          Container(width: 1, height: 42, color: tokens.borderSubtle),
+                          _buildSummaryColumn(
+                            'LIABILITIES',
+                            CurrencyUtils.format(totalLiabilities, currency: currency),
+                            tokens.statusExpense,
+                            tokens.textSecondary,
+                            Icons.credit_card_outlined,
+                          ),
+                          Container(width: 1, height: 42, color: tokens.borderSubtle),
+                          _buildSummaryColumn(
+                            'NET POSITION',
+                            CurrencyUtils.format(netWorth, currency: currency),
+                            netWorth >= 0 ? tokens.statusIncome : tokens.statusExpense,
+                            tokens.textSecondary,
+                            Icons.shield_outlined,
+                          ),
+                        ],
+                      ),
+                      if (assetAccounts.length >= 2) ...[
+                        SizedBox(height: tokens.space4),
+                        Divider(color: tokens.borderSubtle, height: 1),
+                        SizedBox(height: tokens.space3),
+                        InkWell(
+                          onTap: () => _showTransferSheet(context, assetAccounts, currency),
+                          borderRadius: BorderRadius.circular(tokens.radiusSm),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.sync_alt_rounded, size: 16, color: tokens.accentGold),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Transfer Between Accounts',
+                                  style: GoogleFonts.spaceGrotesk(
+                                    color: tokens.accentGold,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: tokens.space4),
+
+              // 2. Interactive Filter Bar
+              StaggeredEntrance(
+                index: 1,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildFilterChip('All (${allAccounts.length})', null, tokens),
+                      _buildFilterChip('Assets (${assetAccounts.length})', AccountType.asset, tokens),
+                      _buildFilterChip('Liabilities (${liabilityAccounts.length})', AccountType.liability, tokens),
+                      _buildFilterChip('Income (${incomeAccounts.length})', AccountType.income, tokens),
+                      _buildFilterChip('Expenses (${expenseAccounts.length})', AccountType.expense, tokens),
+                    ],
+                  ),
+                ),
+              ),
+              SizedBox(height: tokens.space4),
+
+              // 3. Categorized / Grouped Accounts List
+              if (_selectedFilter == null) ...[
+                // All Accounts - Grouped by Category
+                if (assetAccounts.isNotEmpty)
+                  _buildAccountSection(
+                    title: 'LIQUID ASSETS',
+                    subtitle: 'Cash, bank balances, and store of value',
+                    accounts: assetAccounts,
+                    totalGroupCents: totalAssets,
+                    tokens: tokens,
+                    startIndex: 2,
+                    showPercentage: true,
+                    onTransferTap: (acc) => _showTransferSheet(context, assetAccounts, currency, sourceAccount: acc),
+                  ),
+
+                if (liabilityAccounts.isNotEmpty)
+                  _buildAccountSection(
+                    title: 'LIABILITIES & DEBT',
+                    subtitle: 'Credit lines, loans, and payable obligations',
+                    accounts: liabilityAccounts,
+                    totalGroupCents: totalLiabilities,
+                    tokens: tokens,
+                    startIndex: 2 + assetAccounts.length,
+                    showPercentage: false,
+                  ),
+
+                if (incomeAccounts.isNotEmpty)
+                  _buildAccountSection(
+                    title: 'INCOME SOURCES',
+                    subtitle: 'Categories of inflows & deposits',
+                    accounts: incomeAccounts,
+                    totalGroupCents: 0,
+                    tokens: tokens,
+                    startIndex: 2 + assetAccounts.length + liabilityAccounts.length,
+                    showPercentage: false,
+                  ),
+
+                if (expenseAccounts.isNotEmpty)
+                  _buildAccountSection(
+                    title: 'OPERATING EXPENSES',
+                    subtitle: 'Categories of outflows & purchases',
+                    accounts: expenseAccounts,
+                    totalGroupCents: 0,
+                    tokens: tokens,
+                    startIndex: 2 + assetAccounts.length + liabilityAccounts.length + incomeAccounts.length,
+                    showPercentage: false,
+                  ),
+              ] else ...[
+                // Filtered List
+                _buildFilteredList(
+                  accounts: allAccounts.where((a) => a.type == _selectedFilter).toList(),
+                  totalAssets: totalAssets,
+                  tokens: tokens,
+                  assetAccounts: assetAccounts,
+                  currency: currency,
+                ),
+              ],
+              SizedBox(height: tokens.space10),
+            ],
+          ),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: () => _showAddAccountSheet(context, currency),
+            backgroundColor: tokens.statusIncome,
+            foregroundColor: tokens.bgPrimary,
+            elevation: 4,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(tokens.radiusPill),
+            ),
+            icon: const Icon(Icons.add, size: 20),
+            label: Text(
+              'NEW ACCOUNT',
+              style: GoogleFonts.spaceGrotesk(
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSummaryColumn(String label, String value, Color valueColor, Color labelColor, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, size: 16, color: labelColor),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: GoogleFonts.spaceGrotesk(
+            color: labelColor,
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: GoogleFonts.jetBrainsMono(
+            color: valueColor,
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, AccountType? type, CashIOThemeExtension tokens) {
+    final isSelected = _selectedFilter == type;
+    return Padding(
+      padding: EdgeInsets.only(right: tokens.space2),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (_) {
+          HapticFeedback.selectionClick();
+          setState(() {
+            _selectedFilter = type;
+          });
+        },
+        selectedColor: tokens.statusIncome,
+        backgroundColor: tokens.bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(tokens.radiusPill),
+          side: BorderSide(
+            color: isSelected ? tokens.statusIncome : tokens.borderHairline,
+          ),
+        ),
+        labelStyle: GoogleFonts.mukta(
+          color: isSelected ? tokens.bgPrimary : tokens.textPrimary,
+          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAccountSection({
+    required String title,
+    required String subtitle,
+    required List<AccountModel> accounts,
+    required int totalGroupCents,
+    required CashIOThemeExtension tokens,
+    required int startIndex,
+    required bool showPercentage,
+    Function(AccountModel)? onTransferTap,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: tokens.space2),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: GoogleFonts.spaceGrotesk(
+                      color: tokens.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
+                  ),
+                ],
+              ),
+              Text(
+                '${accounts.length} accounts',
+                style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: tokens.space2),
+        ...accounts.asMap().entries.map((entry) {
+          final idx = entry.key;
+          final acc = entry.value;
+          final pct = (totalGroupCents > 0 && acc.balanceCents > 0)
+              ? (acc.balanceCents / totalGroupCents).clamp(0.0, 1.0)
+              : 0.0;
+
+          return StaggeredEntrance(
+            index: startIndex + idx,
+            child: _buildAccountCard(
+              account: acc,
+              tokens: tokens,
+              percentage: showPercentage ? pct : null,
+              onTransfer: onTransferTap != null ? () => onTransferTap(acc) : null,
+            ),
+          );
+        }),
+        SizedBox(height: tokens.space3),
+      ],
+    );
+  }
+
+  Widget _buildFilteredList({
+    required List<AccountModel> accounts,
+    required int totalAssets,
+    required CashIOThemeExtension tokens,
+    required List<AccountModel> assetAccounts,
+    required String currency,
+  }) {
+    if (accounts.isEmpty) {
+      return Container(
+        padding: EdgeInsets.all(tokens.space8),
+        decoration: BoxDecoration(
+          color: tokens.bgSurface,
+          borderRadius: BorderRadius.circular(tokens.radiusMd),
+          border: Border.all(color: tokens.borderHairline),
+        ),
+        child: Center(
+          child: Text(
+            'No accounts found in this category.',
+            style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 14),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: accounts.asMap().entries.map((entry) {
+        final idx = entry.key;
+        final acc = entry.value;
+        final pct = (totalAssets > 0 && acc.type == AccountType.asset && acc.balanceCents > 0)
+            ? (acc.balanceCents / totalAssets).clamp(0.0, 1.0)
+            : null;
+
+        return StaggeredEntrance(
+          index: 2 + idx,
+          child: _buildAccountCard(
+            account: acc,
+            tokens: tokens,
+            percentage: pct,
+            onTransfer: acc.type == AccountType.asset && assetAccounts.length >= 2
+                ? () => _showTransferSheet(context, assetAccounts, currency, sourceAccount: acc)
+                : null,
+          ),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildAccountCard({
+    required AccountModel account,
+    required CashIOThemeExtension tokens,
+    double? percentage,
+    VoidCallback? onTransfer,
+  }) {
+    final color = _getAccountColor(account.type, tokens);
+
+    return Container(
+      margin: EdgeInsets.only(bottom: tokens.space2),
+      decoration: BoxDecoration(
+        color: tokens.bgSurface,
+        borderRadius: BorderRadius.circular(tokens.radiusMd),
+        border: Border.all(color: tokens.borderHairline),
+      ),
+      child: Column(
+        children: [
+          ListTile(
+            contentPadding: EdgeInsets.symmetric(horizontal: tokens.space4, vertical: 2),
+            leading: Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(tokens.radiusSm),
+                border: Border.all(color: color.withValues(alpha: 0.3)),
+              ),
+              child: Icon(account.icon, color: color, size: 20),
+            ),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    account.name,
+                    style: GoogleFonts.mukta(
+                      color: tokens.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (percentage != null && percentage > 0) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: tokens.bgSurfaceElevated,
+                      borderRadius: BorderRadius.circular(tokens.radiusXs),
+                    ),
+                    child: Text(
+                      '${(percentage * 100).toStringAsFixed(0)}% of assets',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: tokens.textTertiary,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            subtitle: Text(
+              account.type.name.toUpperCase(),
+              style: GoogleFonts.spaceGrotesk(
+                color: tokens.textTertiary,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.5,
+              ),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  CurrencyUtils.format(account.balanceCents, currency: account.currency),
+                  style: GoogleFonts.jetBrainsMono(
+                    color: color,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (onTransfer != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: Icon(Icons.sync_alt_rounded, size: 18, color: tokens.accentGold),
+                    tooltip: 'Transfer',
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      onTransfer();
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (percentage != null && percentage > 0) ...[
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: tokens.space4),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(tokens.radiusPill),
+                child: LinearProgressIndicator(
+                  value: percentage,
+                  minHeight: 3,
+                  backgroundColor: tokens.bgSurfaceElevated,
+                  valueColor: AlwaysStoppedAnimation<Color>(tokens.statusIncome),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Color _getAccountColor(AccountType type, CashIOThemeExtension tokens) {
+    switch (type) {
+      case AccountType.asset:
+        return tokens.statusIncome;
+      case AccountType.liability:
+        return tokens.statusExpense;
+      case AccountType.income:
+        return tokens.statusIncome;
+      case AccountType.expense:
+        return tokens.statusExpense;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Double-Entry Transfer Sheet
+  // ---------------------------------------------------------------------------
+  void _showTransferSheet(
+    BuildContext context,
+    List<AccountModel> assetAccounts,
+    String baseCurrency, {
+    AccountModel? sourceAccount,
+  }) {
+    if (assetAccounts.length < 2) return;
+
+    final fromAcc = sourceAccount ?? assetAccounts.first;
+    AccountModel toAcc = assetAccounts.firstWhere(
+      (a) => a.id != fromAcc.id,
+      orElse: () => assetAccounts.last,
+    );
+
+    final amountCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    final tokens = context.tokens;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: tokens.bgSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(tokens.radiusLg)),
+      ),
+      builder: (ctx) {
+        AccountModel currentFrom = fromAcc;
+        AccountModel currentTo = toAcc;
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: tokens.space5,
+                right: tokens.space5,
+                top: tokens.space5,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + tokens.space6,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.swap_horiz_rounded, color: tokens.statusIncome, size: 24),
+                        const SizedBox(width: 8),
+                        Text(
+                          'TRANSFER FUNDS',
+                          style: GoogleFonts.spaceGrotesk(
+                            color: tokens.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Move balance between air-gapped asset accounts',
+                      style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                    ),
+                    SizedBox(height: tokens.space4),
+
+                    // From Account Selector
+                    Text('FROM ACCOUNT', style: GoogleFonts.spaceGrotesk(color: tokens.textTertiary, fontSize: 10, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    DropdownButtonFormField<AccountModel>(
+                      initialValue: currentFrom,
+                      dropdownColor: tokens.bgSurfaceElevated,
+                      decoration: const InputDecoration(isDense: true),
+                      items: assetAccounts.map((a) {
+                        return DropdownMenuItem(
+                          value: a,
+                          child: Text('${a.name} (${CurrencyUtils.format(a.balanceCents, currency: a.currency)})'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setSheetState(() => currentFrom = val);
+                        }
+                      },
+                    ),
+                    SizedBox(height: tokens.space3),
+
+                    // To Account Selector
+                    Text('TO ACCOUNT', style: GoogleFonts.spaceGrotesk(color: tokens.textTertiary, fontSize: 10, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 4),
+                    DropdownButtonFormField<AccountModel>(
+                      initialValue: currentTo,
+                      dropdownColor: tokens.bgSurfaceElevated,
+                      decoration: const InputDecoration(isDense: true),
+                      items: assetAccounts.where((a) => a.id != currentFrom.id).map((a) {
+                        return DropdownMenuItem(
+                          value: a,
+                          child: Text('${a.name} (${CurrencyUtils.format(a.balanceCents, currency: a.currency)})'),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        if (val != null) {
+                          setSheetState(() => currentTo = val);
+                        }
+                      },
+                    ),
+                    SizedBox(height: tokens.space3),
+
+                    // Amount
+                    TextField(
+                      controller: amountCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        labelText: 'Transfer Amount',
+                        prefixText: '$baseCurrency ',
+                      ),
+                    ),
+                    SizedBox(height: tokens.space3),
+
+                    // Note
+                    TextField(
+                      controller: noteCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Note (Optional)',
+                        hintText: 'e.g. ATM cash withdrawal',
+                      ),
+                    ),
+                    SizedBox(height: tokens.space5),
+
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: FilledButton(
+                        onPressed: () async {
+                          final cents = CurrencyUtils.parseToCents(amountCtrl.text.trim());
+                          if (cents <= 0) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Please enter an amount greater than zero.')),
+                            );
+                            return;
+                          }
+
+                          HapticFeedback.mediumImpact();
+                          final note = noteCtrl.text.trim();
+                          final desc = note.isNotEmpty
+                              ? note
+                              : 'Transfer: ${currentFrom.name} -> ${currentTo.name}';
+
+                          // Double-entry transfer:
+                          // Debit recipient account (+cents)
+                          // Credit source account (-cents)
+                          // Sum = (+cents) + (-cents) = 0
+                          final success = await VaultRepository.instance.recordTransaction(
+                            description: desc,
+                            postings: [
+                              PostingModel(accountId: currentTo.id, amountCents: cents),
+                              PostingModel(accountId: currentFrom.id, amountCents: -cents),
+                            ],
+                            note: 'Internal Account Transfer',
+                          );
+
+                          if (ctx.mounted) {
+                            Navigator.pop(ctx);
+                            if (success) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Transferred ${CurrencyUtils.format(cents, currency: baseCurrency)} from ${currentFrom.name} to ${currentTo.name}',
+                                  ),
+                                  backgroundColor: tokens.statusIncome,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: tokens.statusIncome,
+                          foregroundColor: tokens.bgPrimary,
+                        ),
+                        child: Text(
+                          'CONFIRM TRANSFER',
+                          style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Add Account Sheet
+  // ---------------------------------------------------------------------------
+  void _showAddAccountSheet(BuildContext context, String baseCurrency) {
+    final nameCtrl = TextEditingController();
+    final balanceCtrl = TextEditingController();
+    AccountType selectedType = AccountType.asset;
+    IconData selectedIcon = Icons.account_balance_wallet_outlined;
+    final tokens = context.tokens;
+
+    final icons = [
+      Icons.account_balance_wallet_outlined,
+      Icons.account_balance_outlined,
+      Icons.credit_card_outlined,
+      Icons.savings_outlined,
+      Icons.attach_money_rounded,
+      Icons.shopping_bag_outlined,
+      Icons.directions_car_outlined,
+      Icons.home_outlined,
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: tokens.bgSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(tokens.radiusLg)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: tokens.space5,
+                right: tokens.space5,
+                top: tokens.space5,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + tokens.space6,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'CREATE NEW ACCOUNT',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: tokens.textPrimary,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Add an asset, liability, income, or expense category to the ledger',
+                      style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                    ),
+                    SizedBox(height: tokens.space4),
+
+                    // Type Segmented Switcher
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: AccountType.values.map((type) {
+                          final isSelected = selectedType == type;
+                          return Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ChoiceChip(
+                              label: Text(type.name.toUpperCase()),
+                              selected: isSelected,
+                              onSelected: (val) {
+                                if (val) {
+                                  setSheetState(() => selectedType = type);
+                                }
+                              },
+                              selectedColor: tokens.statusIncome,
+                              labelStyle: GoogleFonts.spaceGrotesk(
+                                color: isSelected ? tokens.bgPrimary : tokens.textPrimary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    SizedBox(height: tokens.space4),
+
+                    // Name
+                    TextField(
+                      controller: nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Account Name (e.g. Checking, Savings, Dining)',
+                      ),
+                    ),
+                    SizedBox(height: tokens.space3),
+
+                    // Initial Balance
+                    if (selectedType == AccountType.asset || selectedType == AccountType.liability) ...[
+                      TextField(
+                        controller: balanceCtrl,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        decoration: InputDecoration(
+                          prefixText: '$baseCurrency ',
+                          labelText: 'Opening Balance (Optional)',
+                        ),
+                      ),
+                      SizedBox(height: tokens.space3),
+                    ],
+
+                    // Icon Picker
+                    Text('CHOOSE ICON', style: GoogleFonts.spaceGrotesk(color: tokens.textTertiary, fontSize: 10, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: icons.map((icon) {
+                        final isSel = selectedIcon == icon;
+                        return InkWell(
+                          onTap: () => setSheetState(() => selectedIcon = icon),
+                          borderRadius: BorderRadius.circular(tokens.radiusSm),
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: isSel ? tokens.statusIncome.withValues(alpha: 0.25) : tokens.bgSurfaceElevated,
+                              borderRadius: BorderRadius.circular(tokens.radiusSm),
+                              border: Border.all(color: isSel ? tokens.statusIncome : tokens.borderHairline),
+                            ),
+                            child: Icon(icon, color: isSel ? tokens.statusIncome : tokens.textSecondary, size: 20),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    SizedBox(height: tokens.space5),
+
+                    // Create Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: FilledButton(
+                        onPressed: () {
+                          final name = nameCtrl.text.trim();
+                          if (name.isNotEmpty) {
+                            final cents = CurrencyUtils.parseToCents(balanceCtrl.text);
+                            VaultRepository.instance.addAccount(
+                              name: name,
+                              type: selectedType,
+                              currency: baseCurrency,
+                              initialBalanceCents: cents,
+                              icon: selectedIcon,
+                            );
+                            Navigator.pop(ctx);
+                          }
+                        },
+                        style: FilledButton.styleFrom(
+                          backgroundColor: tokens.statusIncome,
+                          foregroundColor: tokens.bgPrimary,
+                        ),
+                        child: Text(
+                          'CREATE ACCOUNT',
+                          style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
