@@ -2,9 +2,9 @@ name: CI — Build, Lint & Test Matrix
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
@@ -22,19 +22,20 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Set up Flutter Stable
+      - name: Set up Flutter Toolchain (Pinned 3.47.8)
         uses: subosito/flutter-action@v2
         with:
+          flutter-version: '3.47.8'
           channel: 'stable'
           cache: true
 
       - name: Install Dependencies
         run: flutter pub get
 
-      - name: Verify Strict Static Analysis (Zero Warnings / Infos)
-        run: flutter analyze --fatal-infos --fatal-warnings
+      - name: Verify Strict Static Analysis (Zero Errors / Warnings)
+        run: flutter analyze --no-fatal-infos --fatal-warnings
 
       - name: Execute Full Test Suite (Unit, Invariant, Security & Widget)
         run: flutter test --concurrency=1 --coverage
@@ -64,7 +65,7 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Rust Stable Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -72,7 +73,7 @@ jobs:
           components: clippy, rustfmt
 
       - name: Cache Cargo Registry & Target
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/bin/

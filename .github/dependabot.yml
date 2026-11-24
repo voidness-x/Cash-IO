@@ -3,9 +3,17 @@ updates:
   - package-ecosystem: "pub"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    groups:
+      flutter-dependencies:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "google_fonts"
+        versions: [">= 9.0.0"]
+      - dependency-name: "cupertino_icons"
+        versions: [">= 2.0.0"]
     labels:
       - "dependencies"
       - "security"
@@ -13,9 +21,17 @@ updates:
   - package-ecosystem: "cargo"
     directory: "/rust"
     schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    groups:
+      rust-dependencies:
+        patterns:
+          - "*"
+    ignore:
+      - dependency-name: "aes-gcm"
+        versions: [">= 0.11.0"]
+      - dependency-name: "rand_core"
+        versions: [">= 0.10.0"]
     labels:
       - "dependencies"
       - "rust"
@@ -24,9 +40,12 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
-    open-pull-requests-limit: 5
+      interval: "monthly"
+    open-pull-requests-limit: 1
+    groups:
+      actions-dependencies:
+        patterns:
+          - "*"
     labels:
       - "ci"
       - "security"
