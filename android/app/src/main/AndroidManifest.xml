@@ -1,8 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Network permission for GitHub Releases signed OTA checks & opt-in E2EE sync -->
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Required for store-independent self-updating APK installation on Android 8.0+ -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <!-- Optional receipt camera capture -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
@@ -12,7 +10,7 @@
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
-        android:fullBackupContent="false"
+        android:extractNativeLibs="true"
         android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
@@ -32,17 +30,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-
-        <!-- Sandboxed FileProvider strictly scoped to verified OTA APK payloads -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.ota_provider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/ota_file_paths"/>
-        </provider>
 
         <meta-data
             android:name="flutterEmbedding"

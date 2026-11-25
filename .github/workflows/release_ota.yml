@@ -106,6 +106,42 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk \
             "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android.apk"
 
+          flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons \
+            --build-name="${{ needs.prepare-metadata.outputs.version }}" \
+            --build-number="${{ needs.prepare-metadata.outputs.build }}" \
+            --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
+            --dart-define="CASHIO_BUILD_NUMBER=${{ needs.prepare-metadata.outputs.build }}"
+
+          cp build/app/outputs/flutter-apk/app-release.apk \
+            "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android-arm64.apk"
+
+          # Ensure v1 (JAR) + v2 + v3 signature schemes and verify Android manifest installability
+          APKSIGNER_BIN=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name apksigner | sort -V | tail -n 1)
+          AAPT2_BIN=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name aapt2 | sort -V | tail -n 1)
+          for APK_CANDIDATE in "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android.apk" "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android-arm64.apk"; do
+            if [ -n "${CASHIO_KEYSTORE_PATH:-}" ] && [ -f "$CASHIO_KEYSTORE_PATH" ]; then
+              "$APKSIGNER_BIN" sign \
+                --ks "$CASHIO_KEYSTORE_PATH" \
+                --ks-pass env:CASHIO_KEYSTORE_PASSWORD \
+                --ks-key-alias "$CASHIO_KEY_ALIAS" \
+                --key-pass env:CASHIO_KEY_PASSWORD \
+                --v1-signing-enabled true \
+                --v2-signing-enabled true \
+                --v3-signing-enabled true \
+                "$APK_CANDIDATE"
+            fi
+            SIG_OUT=$("$APKSIGNER_BIN" verify --verbose "$APK_CANDIDATE")
+            echo "$SIG_OUT"
+            echo "$SIG_OUT" | grep -q "Verified using v2 scheme (APK Signature Scheme v2): true"
+            echo "$SIG_OUT" | grep -q "Verified using v3 scheme (APK Signature Scheme v3): true"
+            BADGE_OUT=$("$AAPT2_BIN" dump badging "$APK_CANDIDATE")
+            echo "$BADGE_OUT" | grep -q "targetSdkVersion:'34'"
+            if echo "$BADGE_OUT" | grep -q "REQUEST_INSTALL_PACKAGES"; then
+              echo "ERROR: Play Protect dropper permission detected!"
+              exit 1
+            fi
+          done
+
           flutter build web --release --no-tree-shake-icons \
             --build-name="${{ needs.prepare-metadata.outputs.version }}" \
             --build-number="${{ needs.prepare-metadata.outputs.build }}" \
@@ -113,6 +149,9 @@ jobs:
             --dart-define="CASHIO_BUILD_NUMBER=${{ needs.prepare-metadata.outputs.build }}"
           cp web/sqlite3.wasm build/web/ || true
           cp web/sqflite_sw.js build/web/ || true
+          test -f build/web/index.html
+          test -f build/web/main.dart.js
+          test -f build/web/sqlite3.wasm
           (cd build/web && zip -qr "../../dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-web.zip" .)
 
       - name: Shred Temporary Keystore
@@ -154,6 +193,8 @@ jobs:
 
           mkdir -p Payload dist-ios
           cp -R build/ios/iphoneos/Runner.app Payload/
+          test -f Payload/Runner.app/Runner
+          test -f Payload/Runner.app/Info.plist
           zip -qry "dist-ios/cashio-${{ needs.prepare-metadata.outputs.tag }}-ios-unsigned.ipa" Payload
 
       - name: Upload iOS IPA Artifact
@@ -190,10 +231,12 @@ jobs:
         run: |
           cd release-bundle
           APK_FILE="cashio-${TAG}-android.apk"
+          APK_ARM64_FILE="cashio-${TAG}-android-arm64.apk"
           IOS_FILE="cashio-${TAG}-ios-unsigned.ipa"
           WEB_FILE="cashio-${TAG}-web.zip"
 
           APK_SHA=$(sha256sum "$APK_FILE" | awk '{print $1}')
+          APK_ARM64_SHA=$(sha256sum "$APK_ARM64_FILE" | awk '{print $1}')
           IOS_SHA=$(sha256sum "$IOS_FILE" | awk '{print $1}')
           WEB_SHA=$(sha256sum "$WEB_FILE" | awk '{print $1}')
           SHORT_SHA="${SHA_COMMIT:0:7}"
@@ -206,9 +249,11 @@ jobs:
             --arg title "Cash-IO ${TAG} Official Mobile & Web Release" \
             --arg commit "$SHORT_SHA" \
             --arg apk_sha "$APK_SHA" \
+            --arg apk_arm64_sha "$APK_ARM64_SHA" \
             --arg ios_sha "$IOS_SHA" \
             --arg web_sha "$WEB_SHA" \
             --arg apk_url "${BASE_DL}/${APK_FILE}" \
+            --arg apk_arm64_url "${BASE_DL}/${APK_ARM64_FILE}" \
             --arg ios_url "${BASE_DL}/${IOS_FILE}" \
             --arg web_url "${BASE_DL}/${WEB_FILE}" \
             --arg rel_url "https://github.com/${REPO}/releases/tag/${TAG}" \
@@ -218,16 +263,18 @@ jobs:
               release_date: $rel_date,
               title: $title,
               changelog: [
-                ("Signed Android self-updating APK & iOS IPA built from commit " + $commit + "."),
-                "Automatic startup/resume OTA update detection via GitHub Releases.",
-                "Pre-update persistent .cashio.bak snapshot & SHA-256 binary verification.",
-                "Zero-knowledge multi-vault ledger, 50/30/20 on-device advisory & locked goal vaults."
+                ("Play-Protect-compliant Android APK (v1+v2+v3 signed, targetSdk 34) & iOS IPA from commit " + $commit + "."),
+                "Automatic startup/resume GitHub Releases OTA update detection & one-tap upgrade.",
+                "Pre-update persistent .cashio.bak snapshot & SHA-256 verification.",
+                "Persistent IndexedDB Web PWA, offline air-gapped resilience & multi-vault enclaves."
               ],
               sha256_checksum: $apk_sha,
               is_emergency_patch: false,
               download_url: $apk_url,
               apk_download_url: $apk_url,
               apk_sha256_checksum: $apk_sha,
+              apk_arm64_download_url: $apk_arm64_url,
+              apk_arm64_sha256_checksum: $apk_arm64_sha,
               ios_download_url: $ios_url,
               ios_sha256_checksum: $ios_sha,
               web_download_url: $web_url,
@@ -235,7 +282,7 @@ jobs:
               release_page_url: $rel_url
             }' > manifest.json
 
-          sha256sum "$APK_FILE" "$IOS_FILE" "$WEB_FILE" manifest.json > SHA256SUMS.txt
+          sha256sum "$APK_FILE" "$APK_ARM64_FILE" "$IOS_FILE" "$WEB_FILE" manifest.json > SHA256SUMS.txt
           cat manifest.json
           cat SHA256SUMS.txt
 
@@ -255,17 +302,18 @@ jobs:
           cat > release-notes.md <<EOF
           ### Installable Release Packages (\`${TAG}\`)
 
-          - **Android (Direct Phone Install + Built-in Auto-Updater):** \`cashio-${TAG}-android.apk\`
-            - Signed with the persistent Cash-IO RSA-4096 release certificate for seamless in-place OTA upgrades.
-            - Automatically checks GitHub Releases on app launch and foreground resume, creates a \`.cashio.bak\` emergency vault snapshot, verifies SHA-256 integrity, and opens Android's native Package Installer whenever a newer GitHub Release is published.
+          - **Android Universal APK (Recommended — All Android 7–16 Phones & Tablets):** \`cashio-${TAG}-android.apk\`
+          - **Android Slim 64-bit APK (Fastest Download for Modern Phones):** \`cashio-${TAG}-android-arm64.apk\`
+            - Signed with persistent RSA-4096 \`v1 + v2 + v3\` signature schemes (\`targetSdk 34\`, Play-Protect compliant) for clean installation and seamless in-place OTA upgrades.
+            - Automatically checks GitHub Releases on app launch/resume, saves a \`.cashio.bak\` emergency vault snapshot, and triggers Android's system updater whenever a newer GitHub Release is published.
           - **iOS (Unsigned Sideloadable Archive for AltStore / SideStore / Sideloadly):** \`cashio-${TAG}-ios-unsigned.ipa\`
-            - Built with Xcode (\`--no-codesign\`); sideload via AltStore, SideStore, or Sideloadly (which re-signs with your personal Apple ID) or sign with an Apple Developer certificate.
-          - **Web / PWA Bundle:** \`cashio-${TAG}-web.zip\`
+          - **Web / PWA Bundle (Persistent IndexedDB + WASM SQLite):** \`cashio-${TAG}-web.zip\`
           - **OTA Manifest & Checksums:** \`manifest.json\` & \`SHA256SUMS.txt\`
           EOF
 
           ASSETS=(
             "release-bundle/cashio-${TAG}-android.apk"
+            "release-bundle/cashio-${TAG}-android-arm64.apk"
             "release-bundle/cashio-${TAG}-ios-unsigned.ipa"
             "release-bundle/cashio-${TAG}-web.zip"
             "release-bundle/manifest.json"

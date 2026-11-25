@@ -20,14 +20,25 @@ class DatabaseHelper {
   Future<Database> _initDB(String filePath) async {
     if (kIsWeb) {
       databaseFactory = databaseFactoryFfiWebNoWebWorker;
-      return await databaseFactory.openDatabase(
-        inMemoryDatabasePath,
-        options: OpenDatabaseOptions(
-          version: 2,
-          onCreate: _createDB,
-          onUpgrade: _onUpgrade,
-        ),
-      );
+      try {
+        return await databaseFactory.openDatabase(
+          filePath,
+          options: OpenDatabaseOptions(
+            version: 2,
+            onCreate: _createDB,
+            onUpgrade: _onUpgrade,
+          ),
+        );
+      } catch (_) {
+        return await databaseFactory.openDatabase(
+          inMemoryDatabasePath,
+          options: OpenDatabaseOptions(
+            version: 2,
+            onCreate: _createDB,
+            onUpgrade: _onUpgrade,
+          ),
+        );
+      }
     }
 
     final dbFolder = await getApplicationDocumentsDirectory();

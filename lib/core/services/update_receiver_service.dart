@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../storage/vault_repository.dart';
 import '../sync/e2ee_packager.dart';
@@ -258,11 +259,11 @@ class UpdateReceiverService extends ChangeNotifier {
   /// Compile-time version injected via `--dart-define` in CI releases
   static const String compiledVersion = String.fromEnvironment(
     'CASHIO_APP_VERSION',
-    defaultValue: '3.0.0',
+    defaultValue: '3.0.1',
   );
   static const int compiledBuild = int.fromEnvironment(
     'CASHIO_BUILD_NUMBER',
-    defaultValue: 30000,
+    defaultValue: 30001,
   );
 
   /// Official upstream repository and release endpoints for Cash-IO
@@ -679,86 +680,21 @@ class UpdateReceiverService extends ChangeNotifier {
       );
     }
 
-    // 3. On Android physical devices, check REQUEST_INSTALL_PACKAGES permission before downloading
-    if (_useLiveGitHubReleases && OtaPlatformBridge.isAndroidNative && payloadBytes == null) {
-      final allowed = await OtaPlatformBridge.canInstallPackages();
-      if (!allowed) {
-        await OtaPlatformBridge.openInstallPermissionSettings();
-        _status = UpdateStatus.updateAvailable;
-        notifyListeners();
-        return const UpdateApplyResult(
-          success: false,
-          needsInstallPermission: true,
-          message:
-              'Enable "Allow from this source" for Cash-IO in the Android Settings screen that just opened, then tap Install Update again.',
-        );
-      }
-    }
-
-    // 4. Create Pre-Update Emergency Snapshot (.cashio.bak)
+    // 3. Create Pre-Update Emergency Snapshot (.cashio.bak)
     _status = UpdateStatus.creatingSnapshot;
-    _downloadProgress = 0.05;
-    onProgress?.call(0.05, 'Creating encrypted pre-update snapshot (.cashio.bak)...');
+    _downloadProgress = 0.25;
+    onProgress?.call(0.25, 'Creating encrypted pre-update snapshot (.cashio.bak)...');
     notifyListeners();
     final snapshot = await createEmergencyPreUpdateBackup(targetVersion: manifest.version);
 
-    // 5A. Live Native Android Self-Updating APK Flow
+    // 4A. Live Native Android Signed APK Update Flow (Play-Protect-Compliant System Updater)
     if (_useLiveGitHubReleases && OtaPlatformBridge.isAndroidNative && payloadBytes == null) {
-      _status = UpdateStatus.downloadingPayload;
-      onProgress?.call(0.10, 'Downloading signed Cash-IO v${manifest.version} APK from GitHub Releases...');
+      _status = UpdateStatus.verifyingIntegrity;
+      _downloadProgress = 0.65;
+      onProgress?.call(0.65, 'Verifying double-entry ledger invariants before upgrade...');
       notifyListeners();
-
-      final safeFilename = 'cashio_v${manifest.version.replaceAll(RegExp(r'[^0-9A-Za-z._-]'), '_')}.apk';
-      final downloaded = await downloadTrustedApkToSandbox(
-        url: targetUrl,
-        targetFilename: safeFilename,
-        isAllowedRedirectUrl: isTrustedUpdateUrl,
-        onProgress: (ratio, received, total) {
-          _downloadProgress = 0.10 + (ratio * 0.75);
-          final mbDone = (received / (1024 * 1024)).toStringAsFixed(1);
-          final mbTotal = total > 0 ? (total / (1024 * 1024)).toStringAsFixed(1) : '?';
-          onProgress?.call(
-            _downloadProgress,
-            'Downloading APK: ${(ratio * 100).toStringAsFixed(0)}% ($mbDone / $mbTotal MB)...',
-          );
-          notifyListeners();
-        },
-      );
-
-      if (downloaded == null) {
-        _status = UpdateStatus.error;
-        notifyListeners();
-        return UpdateApplyResult(
-          success: false,
-          wasRolledBack: false,
-          message:
-              'Failed to download APK from GitHub Releases. Your vault remains untouched and emergency snapshot ${snapshot.snapshotId} is saved.',
-          snapshot: snapshot,
-        );
-      }
-
-      // Verify SHA-256 checksum of downloaded APK
-      _status = UpdateStatus.verifyingChecksum;
-      onProgress?.call(0.90, 'Verifying SHA-256 cryptographic signature of APK...');
-      notifyListeners();
-
-      if (expectedSha.isNotEmpty &&
-          !E2eePackager.constantTimeStringEquals(downloaded.sha256Hex, expectedSha.toLowerCase())) {
-        await deleteSandboxFileIfExists(downloaded.filePath);
-        _status = UpdateStatus.rolledBack;
-        await rollbackToSnapshot(snapshot.snapshotId);
-        notifyListeners();
-        return UpdateApplyResult(
-          success: false,
-          wasRolledBack: true,
-          message:
-              'Security alert: Downloaded APK SHA-256 mismatch! Corrupted file deleted and vault protected.',
-          snapshot: snapshot,
-        );
-      }
 
       if (!verifyLedgerIntegrity()) {
-        await deleteSandboxFileIfExists(downloaded.filePath);
         _status = UpdateStatus.rolledBack;
         await rollbackToSnapshot(snapshot.snapshotId);
         notifyListeners();
@@ -770,19 +706,19 @@ class UpdateReceiverService extends ChangeNotifier {
         );
       }
 
-      // Launch Android System PackageInstaller
       _status = UpdateStatus.launchingInstaller;
       _downloadProgress = 1.0;
-      onProgress?.call(1.0, 'Launching Android system package updater...');
+      onProgress?.call(1.0, 'Opening signed Cash-IO v${manifest.version} APK updater...');
       notifyListeners();
 
-      final launched = await OtaPlatformBridge.installVerifiedApk(downloaded.filePath);
+      final launched = await OtaPlatformBridge.openHttpsReleaseUrl(targetUrl);
       if (!launched) {
         _status = UpdateStatus.error;
         notifyListeners();
         return UpdateApplyResult(
           success: false,
-          message: 'APK verified, but Android PackageInstaller could not be launched.',
+          message:
+              'Emergency snapshot (${snapshot.snapshotId}) saved, but could not open system browser for $targetUrl.',
           snapshot: snapshot,
         );
       }
@@ -793,21 +729,28 @@ class UpdateReceiverService extends ChangeNotifier {
         success: true,
         launchedSystemInstaller: true,
         message:
-            'Verified SHA-256 & saved emergency backup (${snapshot.snapshotId}). Confirm the Android update prompt to finish installing v${manifest.version}.',
+            'Emergency backup (${snapshot.snapshotId}) saved! Confirm the APK download & Android "Update" prompt to upgrade Cash-IO to v${manifest.version} in-place.',
         snapshot: snapshot,
       );
     }
 
-    // 5B. Live iOS IPA Release Flow
+    // 4B. Live iOS IPA Release Flow
     if (_useLiveGitHubReleases && OtaPlatformBridge.isIOSNative && payloadBytes == null) {
-      final opened = await OtaPlatformBridge.openHttpsReleaseUrl(manifest.effectiveIosUrl);
+      final iosUrl = manifest.effectiveIosUrl;
+      final opened = await OtaPlatformBridge.openHttpsReleaseUrl(iosUrl);
+      if (!opened) {
+        try {
+          await Clipboard.setData(ClipboardData(text: iosUrl));
+        } catch (_) {}
+      }
       _status = UpdateStatus.completed;
       notifyListeners();
       return UpdateApplyResult(
-        success: opened,
+        success: true,
         launchedSystemInstaller: opened,
-        message:
-            'Emergency backup (${snapshot.snapshotId}) saved! Opened signed GitHub Release IPA for Cash-IO v${manifest.version}.',
+        message: opened
+            ? 'Emergency backup (${snapshot.snapshotId}) saved! Opened signed GitHub Release IPA for Cash-IO v${manifest.version}.'
+            : 'Emergency backup (${snapshot.snapshotId}) saved! Direct iOS IPA download link copied to clipboard: $iosUrl',
         snapshot: snapshot,
       );
     }

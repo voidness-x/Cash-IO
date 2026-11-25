@@ -16,10 +16,16 @@ android {
 
     defaultConfig {
         applicationId = "com.cashio.app.cash_io"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 24
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     signingConfigs {
@@ -34,6 +40,9 @@ android {
                 storePassword = keystorePassword
                 keyAlias = keyAliasVal
                 keyPassword = keyPasswordVal
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
             }
         }
     }
@@ -44,7 +53,11 @@ android {
             signingConfig = if (releaseConfig.storeFile != null) {
                 releaseConfig
             } else {
-                signingConfigs.getByName("debug")
+                signingConfigs.getByName("debug").apply {
+                    enableV1Signing = true
+                    enableV2Signing = true
+                    enableV3Signing = true
+                }
             }
             isMinifyEnabled = false
             isShrinkResources = false

@@ -75,12 +75,14 @@ Cash-IO is designed around **Defense-in-Depth** and **Zero-Telemetry** principle
 
 Prebuilt mobile packages and signed OTA manifests are published automatically to **[GitHub Releases](https://github.com/voidness-x/Cash-IO/releases/latest)**:
 
-- **Android (`cashio-vX.Y.Z-android.apk`):**
-  1. Download the `.apk` from [Releases](https://github.com/voidness-x/Cash-IO/releases/latest) onto your Android phone and install it.
+- **Android (`cashio-vX.Y.Z-android.apk` Universal & `cashio-vX.Y.Z-android-arm64.apk` 64-bit Slim):**
+  1. Download either `.apk` from [Releases](https://github.com/voidness-x/Cash-IO/releases/latest) onto your Android phone and install it (Play-Protect-compliant, `targetSdk 34`, signed with `v1 + v2 + v3` signature schemes).
   2. Every release is signed with the persistent Cash-IO RSA-4096 release certificate stored in GitHub Actions Encrypted Secrets, enabling seamless **in-place upgrades** without losing local vault data.
-  3. Whenever a newer release is tagged on GitHub (e.g., `v3.1.0`), Cash-IO automatically detects it on app startup/resume, surfaces an update prompt on the Dashboard, creates a persistent `.cashio.bak` emergency snapshot, streams and SHA-256-verifies the new `.apk`, and launches Android's native Package Installer.
+  3. Whenever a newer release is tagged on GitHub (e.g., `v3.1.0`), Cash-IO automatically detects it on app startup/resume, surfaces an update prompt on the Dashboard, creates a persistent `.cashio.bak` emergency snapshot, and launches Android's system APK updater.
 - **iOS (`cashio-vX.Y.Z-ios-unsigned.ipa`):**
   - Built via macOS Xcode (`--no-codesign`) and packaged as an installable `.ipa` for sideloading via **AltStore**, **SideStore**, or **Sideloadly** (which re-sign the bundle with your personal Apple ID), or signing with an Apple Developer certificate.
+- **Web / PWA (`cashio-vX.Y.Z-web.zip`):**
+  - Standalone offline-ready PWA backed by persistent IndexedDB + `sqlite3.wasm`.
 
 ---
 

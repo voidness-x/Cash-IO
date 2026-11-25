@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
 import 'core/storage/database_helper.dart';
@@ -9,6 +10,24 @@ import 'features/navigation/presentation/main_scaffold.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Graceful offline resilience: absorb transient Google Fonts fetch errors when device is air-gapped
+  final defaultFlutterError = FlutterError.onError;
+  FlutterError.onError = (FlutterErrorDetails details) {
+    final msg = details.exceptionAsString();
+    if (msg.contains('Failed to load font') || msg.contains('fonts.gstatic.com')) {
+      return;
+    }
+    defaultFlutterError?.call(details);
+  };
+  PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {
+    final msg = error.toString();
+    if (msg.contains('Failed to load font') || msg.contains('fonts.gstatic.com')) {
+      return true;
+    }
+    return false;
+  };
+
   runApp(const CashIOApp());
 }
 
