@@ -25,6 +25,10 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            excludes += listOf("**/x86/**", "**/x86_64/**")
+            if (System.getenv("CASHIO_ARM64_ONLY") == "true") {
+                excludes += listOf("**/armeabi-v7a/**")
+            }
         }
     }
 

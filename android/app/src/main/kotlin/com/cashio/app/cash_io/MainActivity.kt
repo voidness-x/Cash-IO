@@ -1,20 +1,26 @@
 package com.cashio.app.cash_io
 
+import android.app.DownloadManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
+import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : FlutterFragmentActivity() {
     companion object {
         private const val OTA_CHANNEL = "com.cashio.app/ota_installer"
         private const val BIOMETRIC_CHANNEL = "com.cashio.app/biometrics"
+        private val SAFE_FILENAME_REGEX = Regex("^[A-Za-z0-9._-]+\\.apk$")
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -94,12 +100,179 @@ class MainActivity : FlutterFragmentActivity() {
                 }
             }
 
-        // 2. GitHub Releases OTA System Updater Channel
+        // 2. GitHub Releases OTA Verified System DownloadManager Channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, OTA_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "canInstallPackages" -> {
                         result.success(true)
+                    }
+
+                    "enqueueApkDownload" -> {
+                        val rawUrl = call.argument<String>("url")
+                        val rawFilename = call.argument<String>("filename") ?: "Cash-IO-update.apk"
+                        val title = call.argument<String>("title") ?: "Cash-IO Update"
+
+                        if (rawUrl.isNullOrBlank()) {
+                            result.error("ERR_INVALID_URL", "URL is empty", null)
+                            return@setMethodCallHandler
+                        }
+                        if (!SAFE_FILENAME_REGEX.matches(rawFilename) || rawFilename.contains("..")) {
+                            result.error("ERR_INVALID_FILENAME", "Invalid APK filename", null)
+                            return@setMethodCallHandler
+                        }
+
+                        try {
+                            val uri = Uri.parse(rawUrl)
+                            if (uri.scheme?.lowercase() != "https") {
+                                result.error("ERR_INSECURE_SCHEME", "Only HTTPS URLs are permitted", null)
+                                return@setMethodCallHandler
+                            }
+
+                            // Remove any stale partial APK with the same filename when accessible
+                            try {
+                                val downloadsDir = Environment.getExternalStoragePublicDirectory(
+                                    Environment.DIRECTORY_DOWNLOADS
+                                )
+                                val existing = File(downloadsDir, rawFilename)
+                                if (existing.exists()) {
+                                    existing.delete()
+                                }
+                            } catch (_: Exception) {
+                                // Scoped storage handles deduplication automatically if not owned
+                            }
+
+                            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                            val request = DownloadManager.Request(uri)
+                                .setTitle(title)
+                                .setDescription("Verifying SHA-256 integrity after download")
+                                .setMimeType("application/vnd.android.package-archive")
+                                .setNotificationVisibility(
+                                    DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED
+                                )
+                                .setDestinationInExternalPublicDir(
+                                    Environment.DIRECTORY_DOWNLOADS,
+                                    rawFilename
+                                )
+                                .setAllowedOverMetered(true)
+                                .setAllowedOverRoaming(true)
+
+                            val downloadId = dm.enqueue(request)
+                            result.success(downloadId)
+                        } catch (e: Exception) {
+                            result.error("ERR_ENQUEUE_FAILED", e.message, null)
+                        }
+                    }
+
+                    "queryApkDownload" -> {
+                        val downloadId = call.argument<Number>("downloadId")?.toLong()
+                        if (downloadId == null || downloadId <= 0L) {
+                            result.error("ERR_INVALID_ID", "Invalid downloadId", null)
+                            return@setMethodCallHandler
+                        }
+
+                        Thread {
+                            try {
+                                val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                                val query = DownloadManager.Query().setFilterById(downloadId)
+                                dm.query(query).use { cursor ->
+                                    if (cursor == null || !cursor.moveToFirst()) {
+                                        runOnUiThread {
+                                            result.success(mapOf("status" to "failed"))
+                                        }
+                                        return@Thread
+                                    }
+
+                                    val statusIdx = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS)
+                                    val soFarIdx = cursor.getColumnIndex(
+                                        DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR
+                                    )
+                                    val totalIdx = cursor.getColumnIndex(
+                                        DownloadManager.COLUMN_TOTAL_SIZE_BYTES
+                                    )
+
+                                    val rawStatus = if (statusIdx >= 0) cursor.getInt(statusIdx) else 0
+                                    val bytesSoFar = if (soFarIdx >= 0) cursor.getLong(soFarIdx) else 0L
+                                    val totalBytes = if (totalIdx >= 0) cursor.getLong(totalIdx) else -1L
+
+                                    when (rawStatus) {
+                                        DownloadManager.STATUS_SUCCESSFUL -> {
+                                            val fileUri = dm.getUriForDownloadedFile(downloadId)
+                                            val sha256Hex = if (fileUri != null) {
+                                                computeUriSha256Hex(fileUri)
+                                            } else {
+                                                ""
+                                            }
+                                            runOnUiThread {
+                                                result.success(
+                                                    mapOf(
+                                                        "status" to "completed",
+                                                        "bytesDownloaded" to bytesSoFar,
+                                                        "totalBytes" to totalBytes,
+                                                        "sha256" to sha256Hex
+                                                    )
+                                                )
+                                            }
+                                        }
+
+                                        DownloadManager.STATUS_FAILED -> {
+                                            runOnUiThread {
+                                                result.success(
+                                                    mapOf(
+                                                        "status" to "failed",
+                                                        "bytesDownloaded" to bytesSoFar,
+                                                        "totalBytes" to totalBytes
+                                                    )
+                                                )
+                                            }
+                                        }
+
+                                        else -> {
+                                            runOnUiThread {
+                                                result.success(
+                                                    mapOf(
+                                                        "status" to "running",
+                                                        "bytesDownloaded" to bytesSoFar,
+                                                        "totalBytes" to totalBytes
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                runOnUiThread {
+                                    result.error("ERR_QUERY_DOWNLOAD", e.message, null)
+                                }
+                            }
+                        }.start()
+                    }
+
+                    "removeApkDownload" -> {
+                        val downloadId = call.argument<Number>("downloadId")?.toLong()
+                        if (downloadId == null || downloadId <= 0L) {
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+                        try {
+                            val dm = getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                            val removed = dm.remove(downloadId)
+                            result.success(removed > 0)
+                        } catch (_: Exception) {
+                            result.success(false)
+                        }
+                    }
+
+                    "openVerifiedApkInstaller" -> {
+                        try {
+                            val downloadsIntent = Intent(DownloadManager.ACTION_VIEW_DOWNLOADS).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            }
+                            startActivity(downloadsIntent)
+                            result.success(true)
+                        } catch (e: Exception) {
+                            result.error("ERR_OPEN_DOWNLOADS", e.message, null)
+                        }
                     }
 
                     "openExternalUrl" -> {
@@ -136,8 +309,9 @@ class MainActivity : FlutterFragmentActivity() {
                             }
                             result.success(
                                 mapOf(
-                                    "versionName" to (pInfo.versionName ?: "3.1.0"),
-                                    "versionCode" to vCode
+                                    "versionName" to (pInfo.versionName ?: "3.1.1"),
+                                    "versionCode" to vCode,
+                                    "supportedAbis" to Build.SUPPORTED_ABIS.toList()
                                 )
                             )
                         } catch (e: Exception) {
@@ -148,5 +322,19 @@ class MainActivity : FlutterFragmentActivity() {
                     else -> result.notImplemented()
                 }
             }
+    }
+
+    private fun computeUriSha256Hex(uri: Uri): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        val inputStream = contentResolver.openInputStream(uri) ?: return ""
+        inputStream.use { stream ->
+            val buffer = ByteArray(65536)
+            var read = stream.read(buffer)
+            while (read > 0) {
+                digest.update(buffer, 0, read)
+                read = stream.read(buffer)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
     }
 }

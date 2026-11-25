@@ -445,6 +445,24 @@ class _UpdateReceiverSheetState extends State<UpdateReceiverSheet> {
                           ),
                         ),
                       ),
+                      if (OtaPlatformBridge.isAndroidNative) ...[
+                        const SizedBox(height: 8),
+                        Center(
+                          child: TextButton.icon(
+                            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                            onPressed: () {
+                              final url = _availableUpdate!.releasePageUrl ??
+                                  UpdateReceiverService.githubReleasesPageUrl;
+                              OtaPlatformBridge.openHttpsReleaseUrl(url);
+                            },
+                            icon: Icon(Icons.open_in_new_rounded, size: 15, color: tokens.textSecondary),
+                            label: Text(
+                              'Or open GitHub Release page directly',
+                              style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ],
                 ),

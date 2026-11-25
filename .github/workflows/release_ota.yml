@@ -97,7 +97,7 @@ jobs:
           flutter pub get
           mkdir -p dist-android
 
-          flutter build apk --release --no-tree-shake-icons \
+          flutter build apk --release --target-platform android-arm,android-arm64 --no-tree-shake-icons \
             --build-name="${{ needs.prepare-metadata.outputs.version }}" \
             --build-number="${{ needs.prepare-metadata.outputs.build }}" \
             --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
@@ -106,7 +106,7 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk \
             "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android.apk"
 
-          flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons \
+          CASHIO_ARM64_ONLY=true flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons \
             --build-name="${{ needs.prepare-metadata.outputs.version }}" \
             --build-number="${{ needs.prepare-metadata.outputs.build }}" \
             --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
@@ -115,25 +115,34 @@ jobs:
           cp build/app/outputs/flutter-apk/app-release.apk \
             "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android-arm64.apk"
 
-          # Ensure v1 (JAR) + v2 + v3 signature schemes and verify Android manifest installability
+          # Enforce 4-byte zipalign + true v1 (JAR) + v2 + v3 signatures + persistent cert fingerprint
+          ZIPALIGN_BIN=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name zipalign | sort -V | tail -n 1)
           APKSIGNER_BIN=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name apksigner | sort -V | tail -n 1)
           AAPT2_BIN=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name aapt2 | sort -V | tail -n 1)
           for APK_CANDIDATE in "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android.apk" "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android-arm64.apk"; do
+            "$ZIPALIGN_BIN" -p -f 4 "$APK_CANDIDATE" "${APK_CANDIDATE}.aligned"
+            mv "${APK_CANDIDATE}.aligned" "$APK_CANDIDATE"
             if [ -n "${CASHIO_KEYSTORE_PATH:-}" ] && [ -f "$CASHIO_KEYSTORE_PATH" ]; then
               "$APKSIGNER_BIN" sign \
                 --ks "$CASHIO_KEYSTORE_PATH" \
                 --ks-pass env:CASHIO_KEYSTORE_PASSWORD \
                 --ks-key-alias "$CASHIO_KEY_ALIAS" \
                 --key-pass env:CASHIO_KEY_PASSWORD \
+                --min-sdk-version 21 \
                 --v1-signing-enabled true \
                 --v2-signing-enabled true \
                 --v3-signing-enabled true \
                 "$APK_CANDIDATE"
             fi
-            SIG_OUT=$("$APKSIGNER_BIN" verify --verbose "$APK_CANDIDATE")
+            "$ZIPALIGN_BIN" -c 4 "$APK_CANDIDATE"
+            SIG_OUT=$("$APKSIGNER_BIN" verify --min-sdk-version 21 --verbose --print-certs "$APK_CANDIDATE")
             echo "$SIG_OUT"
+            echo "$SIG_OUT" | grep -q "Verified using v1 scheme (JAR signing): true"
             echo "$SIG_OUT" | grep -q "Verified using v2 scheme (APK Signature Scheme v2): true"
             echo "$SIG_OUT" | grep -q "Verified using v3 scheme (APK Signature Scheme v3): true"
+            if [ -n "${CASHIO_KEYSTORE_PATH:-}" ] && [ -f "$CASHIO_KEYSTORE_PATH" ]; then
+              echo "$SIG_OUT" | grep -qi "2bb82aadf35fd876d6392216a966c51ec0710d8dac7e6b423d8ce0304c81ac4d"
+            fi
             BADGE_OUT=$("$AAPT2_BIN" dump badging "$APK_CANDIDATE")
             echo "$BADGE_OUT" | grep -q "targetSdkVersion:'34'"
             if echo "$BADGE_OUT" | grep -q "REQUEST_INSTALL_PACKAGES"; then
@@ -271,10 +280,10 @@ jobs:
               release_date: $rel_date,
               title: $title,
               changelog: [
-                ("Native Fingerprint / Biometric Sign-In + 6-Digit PIN protection (" + $commit + ")."),
-                "De-cluttered Dashboard & 100% overflow-free responsive mobile cards.",
-                "Guided Starting Cash, Bank Balance & Starter Budgets onboarding + Quick Setup.",
-                "Play-Protect-compliant APK upgrade with pre-update .cashio.bak snapshot."
+                ("Resumable Android DownloadManager OTA + SHA-256 verification (" + $commit + ")."),
+                "True v1 + v2 + v3 APK signing, 4-byte zipalign & pure arm64/mobile ABI packaging.",
+                "Native Fingerprint / Biometric Sign-In + Guided Starting Cash & Budgets setup.",
+                "De-cluttered responsive Dashboard with pre-update .cashio.bak snapshot protection."
               ],
               sha256_checksum: $apk_sha,
               is_emergency_patch: false,

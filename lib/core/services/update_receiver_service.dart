@@ -19,6 +19,8 @@ class AppUpdateManifest {
   final String downloadUrl;
   final String? apkDownloadUrl;
   final String? apkSha256Checksum;
+  final String? apkArm64DownloadUrl;
+  final String? apkArm64Sha256Checksum;
   final String? iosDownloadUrl;
   final String? iosSha256Checksum;
   final String? releasePageUrl;
@@ -34,6 +36,8 @@ class AppUpdateManifest {
     required this.downloadUrl,
     this.apkDownloadUrl,
     this.apkSha256Checksum,
+    this.apkArm64DownloadUrl,
+    this.apkArm64Sha256Checksum,
     this.iosDownloadUrl,
     this.iosSha256Checksum,
     this.releasePageUrl,
@@ -49,6 +53,18 @@ class AppUpdateManifest {
       ? iosDownloadUrl!
       : (releasePageUrl ?? UpdateReceiverService.githubReleasesPageUrl);
 
+  /// Selects the slim pure `arm64-v8a` APK when the device supports `arm64-v8a`,
+  /// falling back to the multi-ABI mobile APK otherwise.
+  (String url, String sha256) resolveAndroidTarget(List<String> supportedAbis) {
+    final normalizedAbis = supportedAbis.map((a) => a.toLowerCase()).toSet();
+    if (normalizedAbis.contains('arm64-v8a') &&
+        apkArm64DownloadUrl != null &&
+        apkArm64DownloadUrl!.isNotEmpty) {
+      return (apkArm64DownloadUrl!, apkArm64Sha256Checksum ?? '');
+    }
+    return (effectiveApkUrl, effectiveApkSha256);
+  }
+
   Map<String, dynamic> toJson() => {
         'version': version,
         'build_number': buildNumber,
@@ -60,6 +76,8 @@ class AppUpdateManifest {
         'download_url': downloadUrl,
         if (apkDownloadUrl != null) 'apk_download_url': apkDownloadUrl,
         if (apkSha256Checksum != null) 'apk_sha256_checksum': apkSha256Checksum,
+        if (apkArm64DownloadUrl != null) 'apk_arm64_download_url': apkArm64DownloadUrl,
+        if (apkArm64Sha256Checksum != null) 'apk_arm64_sha256_checksum': apkArm64Sha256Checksum,
         if (iosDownloadUrl != null) 'ios_download_url': iosDownloadUrl,
         if (iosSha256Checksum != null) 'ios_sha256_checksum': iosSha256Checksum,
         if (releasePageUrl != null) 'release_page_url': releasePageUrl,
@@ -88,6 +106,8 @@ class AppUpdateManifest {
           downloadUrl: map['download_url'] as String,
           apkDownloadUrl: map['apk_download_url'] as String?,
           apkSha256Checksum: map['apk_sha256_checksum'] as String?,
+          apkArm64DownloadUrl: map['apk_arm64_download_url'] as String?,
+          apkArm64Sha256Checksum: map['apk_arm64_sha256_checksum'] as String?,
           iosDownloadUrl: map['ios_download_url'] as String?,
           iosSha256Checksum: map['ios_sha256_checksum'] as String?,
           releasePageUrl: map['release_page_url'] as String?,
@@ -111,6 +131,8 @@ class AppUpdateManifest {
 
         String? apkUrl;
         String? apkDigest;
+        String? apkArm64Url;
+        String? apkArm64Digest;
         String? iosUrl;
         String? iosDigest;
         String? fallbackUrl;
@@ -120,15 +142,20 @@ class AppUpdateManifest {
           final asset = Map<String, dynamic>.from(rawAsset as Map);
           final name = (asset['name'] as String? ?? '').toLowerCase();
           final url = asset['browser_download_url'] as String?;
-          final digestRaw = asset['digest'] as String?; // GitHub provides "sha256:..." on release assets
+          final digestRaw = asset['digest'] as String?;
           final cleanSha = (digestRaw != null && digestRaw.startsWith('sha256:'))
               ? digestRaw.substring(7)
               : null;
 
           if (url == null) continue;
           if (name.endsWith('.apk')) {
-            apkUrl = url;
-            apkDigest = cleanSha;
+            if (name.contains('arm64')) {
+              apkArm64Url = url;
+              apkArm64Digest = cleanSha;
+            } else {
+              apkUrl = url;
+              apkDigest = cleanSha;
+            }
           } else if (name.endsWith('.ipa')) {
             iosUrl = url;
             iosDigest = cleanSha;
@@ -138,8 +165,10 @@ class AppUpdateManifest {
           }
         }
 
-        final primaryUrl = apkUrl ?? fallbackUrl ?? iosUrl;
-        final primarySha = apkDigest ?? fallbackDigest ?? iosDigest ?? '';
+        final primaryApkUrl = apkUrl ?? apkArm64Url;
+        final primaryApkDigest = apkDigest ?? apkArm64Digest;
+        final primaryUrl = primaryApkUrl ?? fallbackUrl ?? iosUrl;
+        final primarySha = primaryApkDigest ?? fallbackDigest ?? iosDigest ?? '';
         if (primaryUrl == null) return null;
 
         return AppUpdateManifest(
@@ -152,8 +181,10 @@ class AppUpdateManifest {
           changelog: lines.isNotEmpty ? lines : <String>['Official GitHub Release $rawTag'],
           sha256Checksum: primarySha,
           downloadUrl: primaryUrl,
-          apkDownloadUrl: apkUrl,
-          apkSha256Checksum: apkDigest,
+          apkDownloadUrl: primaryApkUrl,
+          apkSha256Checksum: primaryApkDigest,
+          apkArm64DownloadUrl: apkArm64Url,
+          apkArm64Sha256Checksum: apkArm64Digest,
           iosDownloadUrl: iosUrl,
           iosSha256Checksum: iosDigest,
           releasePageUrl: map['html_url'] as String?,
@@ -259,11 +290,11 @@ class UpdateReceiverService extends ChangeNotifier {
   /// Compile-time version injected via `--dart-define` in CI releases
   static const String compiledVersion = String.fromEnvironment(
     'CASHIO_APP_VERSION',
-    defaultValue: '3.1.0',
+    defaultValue: '3.1.1',
   );
   static const int compiledBuild = int.fromEnvironment(
     'CASHIO_BUILD_NUMBER',
-    defaultValue: 30100,
+    defaultValue: 30101,
   );
 
   /// Official upstream repository and release endpoints for Cash-IO
@@ -286,6 +317,7 @@ class UpdateReceiverService extends ChangeNotifier {
 
   String _currentVersion = compiledVersion;
   int _currentBuild = compiledBuild;
+  List<String> _supportedAbis = const [];
   UpdateStatus _status = UpdateStatus.idle;
   double _downloadProgress = 0.0;
   bool _useLiveGitHubReleases = true;
@@ -412,17 +444,24 @@ class UpdateReceiverService extends ChangeNotifier {
   }
 
   Future<void> _syncInstalledPackageVersionIfNeeded() async {
-    if (_packageInfoSynced || !_useLiveGitHubReleases) return;
+    if (!_useLiveGitHubReleases) return;
+    if (_packageInfoSynced && (!OtaPlatformBridge.isAndroidNative || _supportedAbis.isNotEmpty)) {
+      return;
+    }
     _packageInfoSynced = true;
     final info = await OtaPlatformBridge.getInstalledPackageInfo();
     if (info != null) {
       final vName = info['versionName'] as String?;
       final vCode = (info['versionCode'] as num?)?.toInt();
+      final rawAbis = info['supportedAbis'];
       if (vName != null && vName.isNotEmpty) {
         _currentVersion = vName;
       }
       if (vCode != null && vCode > 0) {
         _currentBuild = vCode;
+      }
+      if (rawAbis is List) {
+        _supportedAbis = rawAbis.map((e) => e.toString()).toList();
       }
     }
   }
@@ -635,6 +674,8 @@ class UpdateReceiverService extends ChangeNotifier {
     Uint8List? payloadBytes,
     void Function(double progress, String statusText)? onProgress,
   }) async {
+    await _syncInstalledPackageVersionIfNeeded();
+
     // 1. Anti-Downgrade Gate
     final isHigherSemver = compareSemver(manifest.version, _currentVersion) > 0;
     if (manifest.buildNumber <= _currentBuild && !isHigherSemver) {
@@ -649,7 +690,10 @@ class UpdateReceiverService extends ChangeNotifier {
     }
 
     // 2. Trusted Origin & Manifest Checksum Format Gate
-    final targetUrl = manifest.effectiveApkUrl;
+    final (targetUrl, expectedSha) = OtaPlatformBridge.isAndroidNative
+        ? manifest.resolveAndroidTarget(_supportedAbis)
+        : (manifest.effectiveApkUrl, manifest.effectiveApkSha256);
+
     if (!isTrustedUpdateUrl(targetUrl)) {
       _status = UpdateStatus.error;
       notifyListeners();
@@ -660,7 +704,6 @@ class UpdateReceiverService extends ChangeNotifier {
       );
     }
 
-    final expectedSha = manifest.effectiveApkSha256;
     if (expectedSha.isNotEmpty && !isValidSha256Hex(expectedSha)) {
       _status = UpdateStatus.error;
       notifyListeners();
@@ -682,16 +725,16 @@ class UpdateReceiverService extends ChangeNotifier {
 
     // 3. Create Pre-Update Emergency Snapshot (.cashio.bak)
     _status = UpdateStatus.creatingSnapshot;
-    _downloadProgress = 0.25;
-    onProgress?.call(0.25, 'Creating encrypted pre-update snapshot (.cashio.bak)...');
+    _downloadProgress = 0.15;
+    onProgress?.call(0.15, 'Creating encrypted pre-update snapshot (.cashio.bak)...');
     notifyListeners();
     final snapshot = await createEmergencyPreUpdateBackup(targetVersion: manifest.version);
 
-    // 4A. Live Native Android Signed APK Update Flow (Play-Protect-Compliant System Updater)
+    // 4A. Live Native Android Verified DownloadManager + SHA-256 Checksum Flow
     if (_useLiveGitHubReleases && OtaPlatformBridge.isAndroidNative && payloadBytes == null) {
       _status = UpdateStatus.verifyingIntegrity;
-      _downloadProgress = 0.65;
-      onProgress?.call(0.65, 'Verifying double-entry ledger invariants before upgrade...');
+      _downloadProgress = 0.25;
+      onProgress?.call(0.25, 'Verifying double-entry ledger invariants before upgrade...');
       notifyListeners();
 
       if (!verifyLedgerIntegrity()) {
@@ -706,9 +749,122 @@ class UpdateReceiverService extends ChangeNotifier {
         );
       }
 
+      _status = UpdateStatus.downloadingPayload;
+      _downloadProgress = 0.30;
+      onProgress?.call(0.30, 'Starting resumable system APK download for v${manifest.version}...');
+      notifyListeners();
+
+      final safeVersion = manifest.version.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+      final downloadId = await OtaPlatformBridge.enqueueApkDownload(
+        url: targetUrl,
+        filename: 'Cash-IO-v$safeVersion.apk',
+        title: 'Cash-IO v${manifest.version} Update',
+      );
+
+      if (downloadId != null && downloadId > 0) {
+        const maxPolls = 600; // Up to ~6 minutes with resumable DownloadManager
+        for (int poll = 0; poll < maxPolls; poll++) {
+          final state = await OtaPlatformBridge.queryApkDownload(downloadId);
+          if (state == null) {
+            await OtaPlatformBridge.removeApkDownload(downloadId);
+            _status = UpdateStatus.error;
+            notifyListeners();
+            return UpdateApplyResult(
+              success: false,
+              message:
+                  'Emergency backup (${snapshot.snapshotId}) saved, but system DownloadManager lost download state. Please tap Retry.',
+              snapshot: snapshot,
+            );
+          }
+
+          final dlStatus = state['status'] as String? ?? 'running';
+          final soFar = (state['bytesDownloaded'] as num?)?.toInt() ?? 0;
+          final total = (state['totalBytes'] as num?)?.toInt() ?? -1;
+
+          if (dlStatus == 'completed') {
+            _status = UpdateStatus.verifyingChecksum;
+            _downloadProgress = 0.94;
+            onProgress?.call(0.94, 'Verifying downloaded APK SHA-256 signature & integrity...');
+            notifyListeners();
+
+            final actualSha = (state['sha256'] as String? ?? '').trim().toLowerCase();
+            final sizeTruncated = total > 0 && soFar != total;
+            final shaMismatch = expectedSha.isNotEmpty &&
+                (actualSha.isEmpty ||
+                    !E2eePackager.constantTimeStringEquals(actualSha, expectedSha.toLowerCase()));
+
+            if (sizeTruncated || shaMismatch) {
+              await OtaPlatformBridge.removeApkDownload(downloadId);
+              _status = UpdateStatus.error;
+              notifyListeners();
+              return UpdateApplyResult(
+                success: false,
+                message:
+                    'Incomplete or corrupted APK download blocked before install (SHA-256 / size mismatch). Partial file removed — please tap Retry on a stable connection.',
+                snapshot: snapshot,
+              );
+            }
+
+            _status = UpdateStatus.launchingInstaller;
+            _downloadProgress = 1.0;
+            onProgress?.call(1.0, 'SHA-256 verified! Opening Downloads to install Cash-IO v${manifest.version}...');
+            notifyListeners();
+
+            final opened = await OtaPlatformBridge.openVerifiedApkInstaller(downloadId);
+            _status = UpdateStatus.completed;
+            notifyListeners();
+            return UpdateApplyResult(
+              success: true,
+              launchedSystemInstaller: opened,
+              message:
+                  'SHA-256 verified & backup (${snapshot.snapshotId}) saved! Tap "Cash-IO-v$safeVersion.apk" in Downloads (or your notification shade) and tap Update.',
+              snapshot: snapshot,
+            );
+          }
+
+          if (dlStatus == 'failed') {
+            await OtaPlatformBridge.removeApkDownload(downloadId);
+            _status = UpdateStatus.error;
+            notifyListeners();
+            return UpdateApplyResult(
+              success: false,
+              message:
+                  'APK download interrupted. Emergency snapshot (${snapshot.snapshotId}) is safe — tap Retry or use Direct Browser Download.',
+              snapshot: snapshot,
+            );
+          }
+
+          if (total > 0 && soFar >= 0) {
+            final ratio = (soFar / total).clamp(0.0, 1.0);
+            _downloadProgress = 0.30 + (ratio * 0.62);
+            final mbSoFar = (soFar / (1024 * 1024)).toStringAsFixed(1);
+            final mbTotal = (total / (1024 * 1024)).toStringAsFixed(1);
+            onProgress?.call(
+              _downloadProgress,
+              'Downloading Cash-IO v${manifest.version} ($mbSoFar / $mbTotal MB)...',
+            );
+            notifyListeners();
+          }
+
+          if (!_isRunningInsideWidgetTest()) {
+            await Future.delayed(const Duration(milliseconds: 600));
+          }
+        }
+
+        await OtaPlatformBridge.removeApkDownload(downloadId);
+        _status = UpdateStatus.error;
+        notifyListeners();
+        return UpdateApplyResult(
+          success: false,
+          message: 'APK download timed out before completing. Partial file cleaned up — please tap Retry.',
+          snapshot: snapshot,
+        );
+      }
+
+      // Fallback when system DownloadManager is unavailable on custom ROMs
       _status = UpdateStatus.launchingInstaller;
       _downloadProgress = 1.0;
-      onProgress?.call(1.0, 'Opening signed Cash-IO v${manifest.version} APK updater...');
+      onProgress?.call(1.0, 'Opening signed Cash-IO v${manifest.version} APK download...');
       notifyListeners();
 
       final launched = await OtaPlatformBridge.openHttpsReleaseUrl(targetUrl);
@@ -729,7 +885,7 @@ class UpdateReceiverService extends ChangeNotifier {
         success: true,
         launchedSystemInstaller: true,
         message:
-            'Emergency backup (${snapshot.snapshotId}) saved! Confirm the APK download & Android "Update" prompt to upgrade Cash-IO to v${manifest.version} in-place.',
+            'Emergency backup (${snapshot.snapshotId}) saved! Wait for the APK download to reach 100% before tapping Open -> Update.',
         snapshot: snapshot,
       );
     }
