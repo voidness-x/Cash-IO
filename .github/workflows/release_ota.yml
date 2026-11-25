@@ -151,7 +151,7 @@ jobs:
             fi
           done
 
-          flutter build web --release --no-tree-shake-icons \
+          flutter build web --release --no-web-resources-cdn --no-tree-shake-icons \
             --build-name="${{ needs.prepare-metadata.outputs.version }}" \
             --build-number="${{ needs.prepare-metadata.outputs.build }}" \
             --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
