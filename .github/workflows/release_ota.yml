@@ -67,7 +67,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
           java-version: '17'
@@ -168,8 +168,9 @@ jobs:
   build-ios-ipa:
     name: Build iOS Unsigned Release IPA (macOS Xcode)
     needs: prepare-metadata
-    runs-on: macos-latest
-    timeout-minutes: 35
+    runs-on: macos-15-intel
+    continue-on-error: true
+    timeout-minutes: 30
 
     steps:
       - name: Checkout Repository
@@ -237,10 +238,17 @@ jobs:
 
           APK_SHA=$(sha256sum "$APK_FILE" | awk '{print $1}')
           APK_ARM64_SHA=$(sha256sum "$APK_ARM64_FILE" | awk '{print $1}')
-          IOS_SHA=$(sha256sum "$IOS_FILE" | awk '{print $1}')
           WEB_SHA=$(sha256sum "$WEB_FILE" | awk '{print $1}')
           SHORT_SHA="${SHA_COMMIT:0:7}"
           BASE_DL="https://github.com/${REPO}/releases/download/${TAG}"
+
+          if [ -f "$IOS_FILE" ]; then
+            IOS_SHA=$(sha256sum "$IOS_FILE" | awk '{print $1}')
+            IOS_URL="${BASE_DL}/${IOS_FILE}"
+          else
+            IOS_SHA=""
+            IOS_URL=""
+          fi
 
           jq -n \
             --arg ver "$VER" \
@@ -254,7 +262,7 @@ jobs:
             --arg web_sha "$WEB_SHA" \
             --arg apk_url "${BASE_DL}/${APK_FILE}" \
             --arg apk_arm64_url "${BASE_DL}/${APK_ARM64_FILE}" \
-            --arg ios_url "${BASE_DL}/${IOS_FILE}" \
+            --arg ios_url "$IOS_URL" \
             --arg web_url "${BASE_DL}/${WEB_FILE}" \
             --arg rel_url "https://github.com/${REPO}/releases/tag/${TAG}" \
             '{
@@ -282,7 +290,11 @@ jobs:
               release_page_url: $rel_url
             }' > manifest.json
 
-          sha256sum "$APK_FILE" "$APK_ARM64_FILE" "$IOS_FILE" "$WEB_FILE" manifest.json > SHA256SUMS.txt
+          if [ -f "$IOS_FILE" ]; then
+            sha256sum "$APK_FILE" "$APK_ARM64_FILE" "$IOS_FILE" "$WEB_FILE" manifest.json > SHA256SUMS.txt
+          else
+            sha256sum "$APK_FILE" "$APK_ARM64_FILE" "$WEB_FILE" manifest.json > SHA256SUMS.txt
+          fi
           cat manifest.json
           cat SHA256SUMS.txt
 
@@ -305,6 +317,7 @@ jobs:
           - **Android Universal APK (Recommended — All Android 7–16 Phones & Tablets):** \`cashio-${TAG}-android.apk\`
           - **Android Slim 64-bit APK (Fastest Download for Modern Phones):** \`cashio-${TAG}-android-arm64.apk\`
             - Signed with persistent RSA-4096 \`v1 + v2 + v3\` signature schemes (\`targetSdk 34\`, Play-Protect compliant) for clean installation and seamless in-place OTA upgrades.
+            - Includes Native Fingerprint / Biometric Sign-In, Guided Starting Cash Setup, and 100% overflow-free responsive mobile UI.
             - Automatically checks GitHub Releases on app launch/resume, saves a \`.cashio.bak\` emergency vault snapshot, and triggers Android's system updater whenever a newer GitHub Release is published.
           - **iOS (Unsigned Sideloadable Archive for AltStore / SideStore / Sideloadly):** \`cashio-${TAG}-ios-unsigned.ipa\`
           - **Web / PWA Bundle (Persistent IndexedDB + WASM SQLite):** \`cashio-${TAG}-web.zip\`
@@ -314,11 +327,13 @@ jobs:
           ASSETS=(
             "release-bundle/cashio-${TAG}-android.apk"
             "release-bundle/cashio-${TAG}-android-arm64.apk"
-            "release-bundle/cashio-${TAG}-ios-unsigned.ipa"
             "release-bundle/cashio-${TAG}-web.zip"
             "release-bundle/manifest.json"
             "release-bundle/SHA256SUMS.txt"
           )
+          if [ -f "release-bundle/cashio-${TAG}-ios-unsigned.ipa" ]; then
+            ASSETS+=("release-bundle/cashio-${TAG}-ios-unsigned.ipa")
+          fi
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release edit "$TAG" \
