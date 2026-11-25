@@ -8,6 +8,7 @@ import '../../../core/theme/frosted_scaffold.dart';
 import '../../../core/storage/vault_repository.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/security/bip39_wordlist.dart';
+import '../../../core/security/hardware_vault_service.dart';
 import '../../../core/widgets/cashio_logo.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
@@ -21,47 +22,49 @@ class ProfileSetupScreen extends StatefulWidget {
 
 class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     with TickerProviderStateMixin {
-  // Stage controller:
-  // 0: Intro Splash (Cipher Logo animates, O spins, quiet swipe up prompt)
-  // 1: Name entry (slow smooth fade-in)
-  // 2: Base Currency (IQD default, slow smooth fade-in)
-  // 3: 6-Digit Master PIN (sharp keypad, slow smooth fade-in)
-  // 4: 12-Word BIP-39 Recovery Phrase (fresh dynamic words, slow smooth fade-in)
-  // 5: Final Summary to Edit
+  // Stages:
+  // 0: Intro Splash (Cipher Logo + Tap/Swipe to Start)
+  // 1: Vault Name & Base Currency
+  // 2: Starting Cash, Bank Balance & Starter Budgets (Ease-In Step)
+  // 3: 6-Digit PIN + Fingerprint Biometric Sign-In Toggle
+  // 4: 12-Word Recovery Phrase (2-Column Clean Grid)
+  // 5: Review Summary & Launch Vault
   int _currentStage = 0;
   bool _isEditingFromSummary = false;
 
-  // Intro Splash & Cipher Logo Animation
   late final AnimationController _logoEntranceController;
   late final Animation<double> _logoScale;
   late final Animation<double> _logoOpacity;
 
-  // Cipher text unscrambler state
   static const String _targetLogoText = 'CASH-IO';
   String _currentDecryptedPrefix = '';
   String _currentFlickerSuffix = '';
   Timer? _cipherTimer;
   bool _isCipherFinished = false;
 
-  // The spinning 'O' controller (spins every 2 seconds after cipher finishes)
   late final AnimationController _oSpinController;
-
-  // Quiet Swipe Prompt Animation
   bool _showSwipePrompt = false;
   late final AnimationController _swipePromptPulseController;
 
-  // Stage Data
+  // Step 1: Identity & Currency
   final TextEditingController _nameController = TextEditingController(text: 'Personal Vault');
-  String _selectedCurrency = 'IQD'; // Default IQD
-  bool _autoSyncFx = false;
+  String _selectedCurrency = 'IQD';
+  final bool _autoSyncFx = false;
 
-  // PIN Setup
+  // Step 2: Initial Cash & Financial Setup
+  final TextEditingController _startingCashCtrl = TextEditingController();
+  final TextEditingController _startingBankCtrl = TextEditingController();
+  final TextEditingController _emergencyGoalCtrl = TextEditingController();
+  bool _createStarterEnvelopes = true;
+
+  // Step 3: Security & Biometrics
   String _enteredPin = '';
   String _confirmedPin = '';
   bool _isConfirmingPin = false;
+  bool _enableBiometrics = true;
   String? _pinError;
 
-  // BIP-39 12-Word Recovery Seed (dynamically generated per instance)
+  // Step 4: Recovery Phrase
   late List<String> _recoveryWords;
   bool _backedUpPhrase = false;
   bool _isInitializing = false;
@@ -69,11 +72,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   @override
   void initState() {
     super.initState();
-
-    // 1. Generate fresh 12-word cryptographic recovery phrase
     _recoveryWords = Bip39Helper.generateMnemonic();
 
-    // 2. Logo entrance animation (slow & smooth: 1200ms)
     _logoEntranceController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
@@ -87,19 +87,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       CurvedAnimation(parent: _logoEntranceController, curve: const Interval(0.0, 0.8, curve: Curves.easeIn)),
     );
 
-    // 3. The 'O' continuous rotation controller (2000ms loop)
     _oSpinController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2000),
     );
 
-    // 4. Swipe prompt subtle floating pulse
     _swipePromptPulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
 
-    // Start logo entrance, then start cipher text unscrambler
     _logoEntranceController.forward().then((_) {
       _startCipherAnimation();
     });
@@ -119,8 +116,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
       }
 
       tickCount++;
-
-      // Every 5 ticks (~275ms), resolve the next character
       if (tickCount % 5 == 0 && resolvedChars < _targetLogoText.length) {
         resolvedChars++;
       }
@@ -143,7 +138,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           _isCipherFinished = true;
           _showSwipePrompt = true;
         });
-        // Start spinning the 'O' every 2 seconds continuously!
         _oSpinController.repeat();
       }
     });
@@ -156,6 +150,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     _swipePromptPulseController.dispose();
     _cipherTimer?.cancel();
     _nameController.dispose();
+    _startingCashCtrl.dispose();
+    _startingBankCtrl.dispose();
+    _emergencyGoalCtrl.dispose();
     super.dispose();
   }
 
@@ -173,6 +170,29 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     }
   }
 
+  List<int> _quickChipsForCurrency(String currency) {
+    if (currency == 'IQD') {
+      return const [25000, 100000, 250000, 1000000];
+    }
+    return const [50, 100, 500, 1000];
+  }
+
+  String _formatQuickChip(int amount) {
+    if (amount >= 1000000) return '+1M';
+    if (amount >= 1000) return '+${(amount / 1000).toStringAsFixed(0)}K';
+    return '+$amount';
+  }
+
+  void _incrementController(TextEditingController ctrl, int amount) {
+    HapticFeedback.selectionClick();
+    final raw = ctrl.text.replaceAll(',', '').trim();
+    final current = double.tryParse(raw) ?? 0;
+    final next = current + amount;
+    ctrl.text = next % 1 == 0 ? next.toInt().toString() : next.toStringAsFixed(2);
+    ctrl.selection = TextSelection.fromPosition(TextPosition(offset: ctrl.text.length));
+    setState(() {});
+  }
+
   void _onPinDigit(String digit) {
     if (!_isConfirmingPin) {
       if (_enteredPin.length < CashIOTokens.pinLength) {
@@ -182,7 +202,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           _pinError = null;
         });
         if (_enteredPin.length == CashIOTokens.pinLength) {
-          // Switch to confirm mode
           setState(() {
             _isConfirmingPin = true;
           });
@@ -197,7 +216,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         });
         if (_confirmedPin.length == CashIOTokens.pinLength) {
           if (_confirmedPin == _enteredPin) {
-            // PIN verified
             HapticFeedback.mediumImpact();
             if (_isEditingFromSummary) {
               _isEditingFromSummary = false;
@@ -208,7 +226,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           } else {
             HapticFeedback.heavyImpact();
             setState(() {
-              _pinError = 'PINs do not match. Re-enter PIN.';
+              _pinError = 'PINs did not match. Please enter your 6-digit PIN again.';
               _enteredPin = '';
               _confirmedPin = '';
               _isConfirmingPin = false;
@@ -246,23 +264,36 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
           ? _nameController.text.trim()
           : 'Personal Vault';
       final effectivePin = _enteredPin.isNotEmpty ? _enteredPin : '123456';
+      final startingCashCents = CurrencyUtils.parseToCents(_startingCashCtrl.text.trim());
+      final startingBankCents = CurrencyUtils.parseToCents(_startingBankCtrl.text.trim());
+      final goalTargetCents = CurrencyUtils.parseToCents(_emergencyGoalCtrl.text.trim());
 
-      // Timeout safety ensures commit never hangs indefinitely
+      await HardwareVaultService.instance.setBiometricsEnabled(_enableBiometrics);
+
       await VaultRepository.instance.initializeProfile(
         name: name,
         currency: _selectedCurrency,
         onlineFx: _autoSyncFx,
         pin: effectivePin,
         mnemonic: _recoveryWords.join(' '),
-      ).timeout(const Duration(seconds: 4), onTimeout: () {
-        // Fallback proceeds smoothly
-      });
+      ).timeout(const Duration(seconds: 4), onTimeout: () {});
+
+      if (startingCashCents > 0 ||
+          startingBankCents > 0 ||
+          _createStarterEnvelopes ||
+          goalTargetCents > 0) {
+        await VaultRepository.instance.setupInitialFinancialData(
+          startingCashCents: startingCashCents,
+          startingBankCents: startingBankCents,
+          createStarterEnvelopes: _createStarterEnvelopes,
+          emergencyGoalTargetCents: goalTargetCents,
+        ).timeout(const Duration(seconds: 4), onTimeout: () {});
+      }
 
       HapticFeedback.mediumImpact();
       widget.onProfileCreated();
     } catch (_) {
       if (mounted) {
-        // Still proceed to unlock the vault for the user
         widget.onProfileCreated();
       }
     }
@@ -270,9 +301,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? CashIOTokens.darkTextHigh : CashIOTokens.lightTextHigh;
-    final mutedColor = isDark ? CashIOTokens.darkTextMuted : CashIOTokens.lightTextMuted;
+    final tokens = context.tokens;
 
     return FrostedScaffold(
       body: GestureDetector(
@@ -282,62 +311,62 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
             _onSwipeUpTriggered();
           }
         },
-        child: AnimatedSwitcher(
-          duration: CashIOTokens.animSmooth,
-          switchInCurve: Curves.easeInOutCubic,
-          switchOutCurve: Curves.easeInCubic,
-          transitionBuilder: (child, animation) {
-            return FadeTransition(
-              opacity: animation,
-              child: SlideTransition(
-                position: Tween<Offset>(
-                  begin: const Offset(0.0, 0.04),
-                  end: Offset.zero,
-                ).animate(animation),
-                child: child,
-              ),
-            );
-          },
-          child: _buildCurrentStageView(isDark, textColor, mutedColor),
+        child: SafeArea(
+          child: AnimatedSwitcher(
+            duration: CashIOTokens.animSmooth,
+            switchInCurve: Curves.easeInOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            transitionBuilder: (child, animation) {
+              return FadeTransition(
+                opacity: animation,
+                child: SlideTransition(
+                  position: Tween<Offset>(
+                    begin: const Offset(0.0, 0.03),
+                    end: Offset.zero,
+                  ).animate(animation),
+                  child: child,
+                ),
+              );
+            },
+            child: _buildCurrentStageView(tokens),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildCurrentStageView(bool isDark, Color textColor, Color mutedColor) {
+  Widget _buildCurrentStageView(CashIOThemeExtension tokens) {
     switch (_currentStage) {
       case 0:
-        return _buildStage0Intro(isDark, textColor, mutedColor);
+        return _buildStage0Intro(tokens);
       case 1:
-        return _buildStage1Name(isDark, textColor, mutedColor);
+        return _buildStage1IdentityAndCurrency(tokens);
       case 2:
-        return _buildStage2Currency(isDark, textColor, mutedColor);
+        return _buildStage2InitialCashSetup(tokens);
       case 3:
-        return _buildStage3Pin(isDark, textColor, mutedColor);
+        return _buildStage3PinAndBiometrics(tokens);
       case 4:
-        return _buildStage4RecoverySeed(isDark, textColor, mutedColor);
+        return _buildStage4RecoverySeed(tokens);
       case 5:
-        return _buildStage5Summary(isDark, textColor, mutedColor);
+        return _buildStage5Summary(tokens);
       default:
         return const SizedBox.shrink();
     }
   }
 
   // ---------------------------------------------------------------------------
-  // STAGE 0: Logo (Using Picture), Cipher Decryption & Spinning 'O'
+  // STAGE 0: Brand Intro Splash
   // ---------------------------------------------------------------------------
-  Widget _buildStage0Intro(bool isDark, Color textColor, Color mutedColor) {
+  Widget _buildStage0Intro(CashIOThemeExtension tokens) {
     return KeyedSubtree(
       key: const ValueKey('stage_0_intro'),
       child: Center(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: CashIOTokens.space6),
+          padding: EdgeInsets.symmetric(horizontal: tokens.space6),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               const Spacer(flex: 3),
-
-              // Animated Logo Container (Clean typographic Cash-IO, No Shield)
               AnimatedBuilder(
                 animation: _logoEntranceController,
                 builder: (context, child) {
@@ -351,26 +380,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                 },
                 child: Column(
                   children: [
-                    // Typographic Logo: CASH-I with Centered Spinning 'O'
-                    _buildAnimatedLogoTitle(textColor),
-
+                    _buildAnimatedLogoTitle(tokens.textPrimary),
                     const SizedBox(height: CashIOTokens.space3),
                     Text(
                       'AIR-GAPPED ZERO-KNOWLEDGE LEDGER',
+                      textAlign: TextAlign.center,
                       style: GoogleFonts.mukta(
-                        color: CashIOTokens.brand.withValues(alpha: 0.9),
+                        color: CashIOTokens.brand.withValues(alpha: 0.95),
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        letterSpacing: 2.0,
+                        letterSpacing: 1.8,
                       ),
                     ),
                   ],
                 ),
               ),
-
               const Spacer(flex: 3),
-
-              // Quiet & Smooth Sinusoidal Floating Capsule Swipe Prompt
               AnimatedOpacity(
                 opacity: _showSwipePrompt ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 900),
@@ -379,8 +404,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                   animation: _swipePromptPulseController,
                   builder: (context, child) {
                     final t = _swipePromptPulseController.value;
-                    // Silky smooth sinusoidal float: (0 -> -8 -> 0)
-                    final dy = -8.0 * (0.5 - 0.5 * cos(t * 2 * pi));
+                    final dy = -6.0 * (0.5 - 0.5 * cos(t * 2 * pi));
                     return Transform.translate(
                       offset: Offset(0, dy),
                       child: child,
@@ -394,36 +418,33 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                         decoration: BoxDecoration(
-                          color: CashIOTokens.darkSurface,
+                          color: tokens.bgSurface,
                           borderRadius: BorderRadius.circular(CashIOTokens.radiusPill),
                           border: Border.all(
-                            color: CashIOTokens.brand.withValues(alpha: 0.45),
+                            color: CashIOTokens.brand.withValues(alpha: 0.5),
                             width: 1.2,
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: CashIOTokens.brand.withValues(alpha: 0.20),
-                              blurRadius: 18,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.arrow_upward_rounded,
                               size: 18,
                               color: CashIOTokens.brand,
                             ),
                             const SizedBox(width: 10),
-                            Text(
-                              'Swipe up or tap to start',
-                              style: GoogleFonts.mukta(
-                                color: CashIOTokens.darkTextHigh,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.4,
+                            Flexible(
+                              child: Text(
+                                'Swipe up or tap to start',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.mukta(
+                                  color: tokens.textPrimary,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.3,
+                                ),
                               ),
                             ),
                           ],
@@ -441,8 +462,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
-  /// Builds the cipher decryption text.
-  /// When finished, renders CashIOLogo with a mathematically centered spinning 'O'.
   Widget _buildAnimatedLogoTitle(Color textColor) {
     if (!_isCipherFinished) {
       return Text(
@@ -465,103 +484,164 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // STAGE 1: Profile Name (Slow Smooth Sequential Fade-ins)
+  // STAGE 1: Vault Name & Base Currency
   // ---------------------------------------------------------------------------
-  Widget _buildStage1Name(bool isDark, Color textColor, Color mutedColor) {
+  Widget _buildStage1IdentityAndCurrency(CashIOThemeExtension tokens) {
     return KeyedSubtree(
-      key: const ValueKey('stage_1_name'),
+      key: const ValueKey('stage_1_identity'),
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: CashIOTokens.space6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSmoothFadeItem(
-                delayMs: 0,
-                child: _buildStepIndicator(1, 4, mutedColor),
-              ),
-              const SizedBox(height: CashIOTokens.space3),
-
-              _buildSmoothFadeItem(
-                delayMs: 150,
-                child: Text(
-                  'Choose a name for this profile',
-                  style: GoogleFonts.mukta(
-                    color: textColor,
-                    fontSize: 24,
+          padding: EdgeInsets.symmetric(horizontal: tokens.space5, vertical: tokens.space4),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStepIndicator(1, 5, tokens),
+                SizedBox(height: tokens.space3),
+                Text(
+                  'Name your vault & choose currency',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textPrimary,
+                    fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
                   ),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space2),
-
-              _buildSmoothFadeItem(
-                delayMs: 300,
-                child: Text(
-                  'Each profile on this device holds an independent, zero-knowledge encrypted vault.',
-                  style: GoogleFonts.mukta(color: mutedColor, fontSize: 14, height: 1.4),
+                const SizedBox(height: 6),
+                Text(
+                  'Your accounts, budgets, and reports will default to this currency.',
+                  style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 14, height: 1.35),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space6),
+                SizedBox(height: tokens.space5),
 
-              _buildSmoothFadeItem(
-                delayMs: 450,
-                child: TextField(
+                Text(
+                  'VAULT NAME',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
                   controller: _nameController,
-                  autofocus: true,
                   textCapitalization: TextCapitalization.words,
-                  style: GoogleFonts.mukta(color: textColor, fontSize: 17, fontWeight: FontWeight.w600),
-                  decoration: InputDecoration(
-                    hintText: 'e.g. Personal Vault, Treasury, Alex',
-                    hintStyle: GoogleFonts.mukta(color: mutedColor.withValues(alpha: 0.6)),
-                    prefixIcon: const Icon(Icons.person_outline, color: CashIOTokens.brandLight, size: 22),
+                  style: GoogleFonts.mukta(color: tokens.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
+                  decoration: const InputDecoration(
+                    hintText: 'e.g. Personal Vault, Family Budget',
+                    prefixIcon: Icon(Icons.person_outline, size: 20),
                   ),
-                  onSubmitted: (_) {
-                    if (_isEditingFromSummary) {
-                      _isEditingFromSummary = false;
-                      _transitionToStage(5);
-                    } else {
-                      _transitionToStage(2);
-                    }
+                ),
+                SizedBox(height: tokens.space5),
+
+                Text(
+                  'BASE CURRENCY',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cardWidth = ((constraints.maxWidth - 10) / 2).clamp(130.0, 240.0);
+                    return Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: CurrencyUtils.supportedCurrencies.map((c) {
+                        final code = c['code']!;
+                        final name = c['name']!;
+                        final symbol = c['symbol']!;
+                        final isSelected = _selectedCurrency == code;
+
+                        return InkWell(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _selectedCurrency = code);
+                          },
+                          borderRadius: BorderRadius.circular(tokens.radiusSm),
+                          child: Container(
+                            width: cardWidth,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? tokens.accent.withValues(alpha: 0.16)
+                                  : tokens.bgSurface,
+                              borderRadius: BorderRadius.circular(tokens.radiusSm),
+                              border: Border.all(
+                                color: isSelected ? tokens.accent : tokens.borderHairline,
+                                width: isSelected ? 1.5 : 1.0,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      code,
+                                      style: GoogleFonts.spaceGrotesk(
+                                        color: isSelected ? tokens.accent : tokens.textPrimary,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    Flexible(
+                                      child: Text(
+                                        symbol,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.mukta(
+                                          color: isSelected ? tokens.accent : tokens.textSecondary,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.mukta(
+                                    color: tokens.textSecondary,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    );
                   },
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space6),
+                SizedBox(height: tokens.space5),
 
-              _buildSmoothFadeItem(
-                delayMs: 600,
-                child: Row(
-                  children: [
-                    if (_isEditingFromSummary)
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () {
-                            _isEditingFromSummary = false;
-                            _transitionToStage(5);
-                          },
-                          child: const Text('Cancel'),
-                        ),
-                      ),
-                    if (_isEditingFromSummary) const SizedBox(width: CashIOTokens.space3),
-                    Expanded(
-                      child: FilledButton(
-                        onPressed: () {
-                          if (_isEditingFromSummary) {
-                            _isEditingFromSummary = false;
-                            _transitionToStage(5);
-                          } else {
-                            _transitionToStage(2);
-                          }
-                        },
-                        child: Text(_isEditingFromSummary ? 'Save & Return' : 'Next: Currency'),
-                      ),
-                    ),
-                  ],
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: FilledButton(
+                    onPressed: () {
+                      if (_isEditingFromSummary) {
+                        _isEditingFromSummary = false;
+                        _transitionToStage(5);
+                      } else {
+                        _transitionToStage(2);
+                      }
+                    },
+                    child: Text(_isEditingFromSummary ? 'Save & Return' : 'Next: Starting Cash'),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -569,179 +649,160 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // STAGE 2: Base Currency (IQD Default, Slow Smooth Fade-ins)
+  // STAGE 2: Starting Cash, Bank Balance & Starter Budgets (Ease-In Step)
   // ---------------------------------------------------------------------------
-  Widget _buildStage2Currency(bool isDark, Color textColor, Color mutedColor) {
+  Widget _buildStage2InitialCashSetup(CashIOThemeExtension tokens) {
+    final quickChips = _quickChipsForCurrency(_selectedCurrency);
+
     return KeyedSubtree(
-      key: const ValueKey('stage_2_currency'),
+      key: const ValueKey('stage_2_cash_setup'),
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: CashIOTokens.space6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSmoothFadeItem(
-                delayMs: 0,
-                child: _buildStepIndicator(2, 4, mutedColor),
-              ),
-              const SizedBox(height: CashIOTokens.space3),
-
-              _buildSmoothFadeItem(
-                delayMs: 150,
-                child: Text(
-                  'Select default base currency',
-                  style: GoogleFonts.mukta(
-                    color: textColor,
-                    fontSize: 24,
+          padding: EdgeInsets.symmetric(horizontal: tokens.space5, vertical: tokens.space4),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStepIndicator(2, 5, tokens),
+                SizedBox(height: tokens.space3),
+                Text(
+                  'Set your starting cash & balances',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textPrimary,
+                    fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
                   ),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space2),
-
-              _buildSmoothFadeItem(
-                delayMs: 300,
-                child: Text(
-                  'Your net worth, reports, and runways will calculate in this currency. (IQD set as default)',
-                  style: GoogleFonts.mukta(color: mutedColor, fontSize: 14, height: 1.4),
+                const SizedBox(height: 6),
+                Text(
+                  'Add the cash in your wallet and bank right now so your dashboard is ready to use immediately.',
+                  style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 14, height: 1.35),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space5),
+                SizedBox(height: tokens.space4),
 
-              _buildSmoothFadeItem(
-                delayMs: 450,
-                child: Wrap(
-                  spacing: CashIOTokens.space2,
-                  runSpacing: CashIOTokens.space2,
-                  children: CurrencyUtils.supportedCurrencies.map((c) {
-                    final code = c['code']!;
-                    final name = c['name']!;
-                    final symbol = c['symbol']!;
-                    final isSelected = _selectedCurrency == code;
-
-                    return InkWell(
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        setState(() {
-                          _selectedCurrency = code;
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
-                      child: Container(
-                        width: 104,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: CashIOTokens.space3,
-                          vertical: CashIOTokens.space2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? CashIOTokens.brand.withValues(alpha: 0.18)
-                              : CashIOTokens.darkSurface,
-                          borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
-                          border: Border.all(
-                            color: isSelected ? CashIOTokens.brand : CashIOTokens.darkBorder,
-                            width: isSelected ? 1.6 : 1.0,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  code,
-                                  style: GoogleFonts.mukta(
-                                    color: isSelected ? CashIOTokens.brandLight : textColor,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                                Text(
-                                  symbol,
-                                  style: GoogleFonts.mukta(
-                                    color: isSelected ? CashIOTokens.brandLight : mutedColor,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 1),
-                            Text(
-                              name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.mukta(
-                                color: mutedColor,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
+                // Cash Wallet
+                Text(
+                  'CASH IN WALLET ($_selectedCurrency)',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _startingCashCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: GoogleFonts.jetBrainsMono(color: tokens.textPrimary, fontSize: 18, fontWeight: FontWeight.w700),
+                  decoration: InputDecoration(
+                    prefixText: '$_selectedCurrency ',
+                    hintText: '0',
+                    prefixIcon: const Icon(Icons.wallet_outlined, size: 20),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: quickChips.map((amt) {
+                    return ActionChip(
+                      label: Text(
+                        _formatQuickChip(amt),
+                        style: GoogleFonts.jetBrainsMono(fontSize: 11, fontWeight: FontWeight.w700, color: tokens.accent),
                       ),
+                      backgroundColor: tokens.bgSurface,
+                      side: BorderSide(color: tokens.borderHairline),
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => _incrementController(_startingCashCtrl, amt),
                     );
                   }).toList(),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space5),
+                SizedBox(height: tokens.space4),
 
-              _buildSmoothFadeItem(
-                delayMs: 600,
-                child: Container(
-                  padding: const EdgeInsets.all(CashIOTokens.space3),
-                  decoration: BoxDecoration(
-                    color: CashIOTokens.darkSurface,
-                    borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
-                    border: Border.all(color: CashIOTokens.darkBorder),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Online FX Rate Updates',
-                              style: GoogleFonts.mukta(
-                                color: textColor,
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            Text(
-                              _autoSyncFx ? 'Enabled (Internet access on request)' : 'Air-Gapped (100% offline & private)',
-                              style: GoogleFonts.mukta(color: mutedColor, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch.adaptive(
-                        value: _autoSyncFx,
-                        activeTrackColor: CashIOTokens.brand,
-                        onChanged: (val) {
-                          setState(() {
-                            _autoSyncFx = val;
-                          });
-                        },
-                      ),
-                    ],
+                // Bank Balance
+                Text(
+                  'BANK OR CARD BALANCE (OPTIONAL)',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
                   ),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space6),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _startingBankCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: GoogleFonts.jetBrainsMono(color: tokens.textPrimary, fontSize: 16, fontWeight: FontWeight.w700),
+                  decoration: InputDecoration(
+                    prefixText: '$_selectedCurrency ',
+                    hintText: '0',
+                    prefixIcon: const Icon(Icons.account_balance_outlined, size: 20),
+                  ),
+                ),
+                SizedBox(height: tokens.space4),
 
-              _buildSmoothFadeItem(
-                delayMs: 750,
-                child: Row(
+                // Savings Goal Target
+                Text(
+                  'SAVINGS GOAL TARGET (OPTIONAL)',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _emergencyGoalCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: GoogleFonts.jetBrainsMono(color: tokens.textPrimary, fontSize: 16, fontWeight: FontWeight.w700),
+                  decoration: InputDecoration(
+                    prefixText: '$_selectedCurrency ',
+                    hintText: _selectedCurrency == 'IQD' ? 'e.g. 1500000' : 'e.g. 1500',
+                    prefixIcon: const Icon(Icons.shield_outlined, size: 20),
+                  ),
+                ),
+                SizedBox(height: tokens.space3),
+
+                Container(
+                  decoration: BoxDecoration(
+                    color: tokens.bgSurface,
+                    borderRadius: BorderRadius.circular(tokens.radiusSm),
+                    border: Border.all(color: tokens.borderHairline),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(tokens.radiusSm),
+                    clipBehavior: Clip.antiAlias,
+                    child: SwitchListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                      title: Text(
+                        'Auto-create starter budget envelopes',
+                        style: GoogleFonts.mukta(color: tokens.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        'Pre-configures Essentials, Bills & Transport, and Personal envelopes',
+                        style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                      ),
+                      value: _createStarterEnvelopes,
+                      activeTrackColor: tokens.accent,
+                      onChanged: (val) => setState(() => _createStarterEnvelopes = val),
+                    ),
+                  ),
+                ),
+                SizedBox(height: tokens.space5),
+
+                Row(
                   children: [
                     OutlinedButton(
                       onPressed: () => _transitionToStage(1),
                       child: const Text('Back'),
                     ),
-                    const SizedBox(width: CashIOTokens.space3),
+                    SizedBox(width: tokens.space3),
                     Expanded(
                       child: FilledButton(
                         onPressed: () {
@@ -752,13 +813,28 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                             _transitionToStage(3);
                           }
                         },
-                        child: Text(_isEditingFromSummary ? 'Save & Return' : 'Next: Security PIN'),
+                        child: Text(_isEditingFromSummary ? 'Save & Return' : 'Next: Security'),
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
+                if (!_isEditingFromSummary)
+                  Center(
+                    child: TextButton(
+                      onPressed: () {
+                        _startingCashCtrl.clear();
+                        _startingBankCtrl.clear();
+                        _emergencyGoalCtrl.clear();
+                        _transitionToStage(3);
+                      },
+                      child: Text(
+                        'Skip for now (start with 0 balance)',
+                        style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 13),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
@@ -766,100 +842,125 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // STAGE 3: 6-Digit PIN (Slow Smooth Sequential Fade-ins)
+  // STAGE 3: 6-Digit PIN & Fingerprint Biometric Unlock
   // ---------------------------------------------------------------------------
-  Widget _buildStage3Pin(bool isDark, Color textColor, Color mutedColor) {
+  Widget _buildStage3PinAndBiometrics(CashIOThemeExtension tokens) {
     final currentInput = _isConfirmingPin ? _confirmedPin : _enteredPin;
 
     return KeyedSubtree(
       key: const ValueKey('stage_3_pin'),
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: CashIOTokens.space6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildSmoothFadeItem(
-                delayMs: 0,
-                child: _buildStepIndicator(3, 4, mutedColor),
-              ),
-              const SizedBox(height: CashIOTokens.space2),
-
-              _buildSmoothFadeItem(
-                delayMs: 150,
-                child: Text(
-                  _isConfirmingPin ? 'Confirm your 6-digit Master PIN' : 'Create your 6-digit Master PIN',
+          padding: EdgeInsets.symmetric(horizontal: tokens.space5, vertical: tokens.space4),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 440),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildStepIndicator(3, 5, tokens),
+                SizedBox(height: tokens.space3),
+                Text(
+                  _isConfirmingPin ? 'Confirm your 6-digit PIN' : 'Create a 6-digit Master PIN',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.mukta(
-                    color: textColor,
-                    fontSize: 22,
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textPrimary,
+                    fontSize: 21,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
                   ),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space1),
-
-              _buildSmoothFadeItem(
-                delayMs: 300,
-                child: Text(
-                  _isConfirmingPin
-                      ? 'Re-enter your 6 digits to verify'
-                      : 'Derives local AES-256-GCM vault key via Argon2id',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.mukta(color: mutedColor, fontSize: 13),
-                ),
-              ),
-              if (_pinError != null) ...[
-                const SizedBox(height: CashIOTokens.space2),
+                const SizedBox(height: 4),
                 Text(
-                  _pinError!,
-                  style: GoogleFonts.mukta(color: CashIOTokens.expense, fontSize: 13, fontWeight: FontWeight.bold),
+                  _isConfirmingPin
+                      ? 'Enter the same 6 digits to verify'
+                      : 'Protects your vault alongside fingerprint unlock',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 13),
                 ),
-              ],
-              const SizedBox(height: CashIOTokens.space5),
+                if (_pinError != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _pinError!,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.mukta(color: CashIOTokens.expense, fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                ],
+                SizedBox(height: tokens.space4),
 
-              // Sharp Rectangular PIN Indicators
-              _buildSmoothFadeItem(
-                delayMs: 450,
-                child: Row(
+                // PIN Dots
+                Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(CashIOTokens.pinLength, (index) {
                     final isFilled = index < currentInput.length;
                     return AnimatedContainer(
                       duration: CashIOTokens.animFast,
-                      margin: const EdgeInsets.symmetric(horizontal: CashIOTokens.space1),
-                      width: 24,
-                      height: 5,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      width: 16,
+                      height: 16,
                       decoration: BoxDecoration(
-                        color: isFilled ? CashIOTokens.brand : CashIOTokens.darkBorder,
-                        borderRadius: BorderRadius.circular(CashIOTokens.radiusXs),
+                        color: isFilled ? tokens.accent : tokens.bgSurfaceElevated,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: isFilled ? tokens.accent : tokens.borderHairline,
+                          width: 1.4,
+                        ),
                       ),
                     );
                   }),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space5),
+                SizedBox(height: tokens.space4),
 
-              // Sharp Keypad
-              _buildSmoothFadeItem(
-                delayMs: 600,
-                child: _buildSharpKeypad(isDark, textColor),
-              ),
-              const SizedBox(height: CashIOTokens.space4),
+                // Fingerprint Toggle
+                Container(
+                  decoration: BoxDecoration(
+                    color: tokens.bgSurface,
+                    borderRadius: BorderRadius.circular(tokens.radiusSm),
+                    border: Border.all(color: tokens.borderHairline),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(tokens.radiusSm),
+                    clipBehavior: Clip.antiAlias,
+                    child: SwitchListTile(
+                      dense: true,
+                      secondary: Icon(Icons.fingerprint_rounded, color: tokens.accent, size: 22),
+                      title: Text(
+                        'Enable Fingerprint Sign-In',
+                        style: GoogleFonts.mukta(color: tokens.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        'Prompt fingerprint sensor automatically on app launch',
+                        style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                      ),
+                      value: _enableBiometrics,
+                      activeTrackColor: tokens.accent,
+                      onChanged: (val) => setState(() => _enableBiometrics = val),
+                    ),
+                  ),
+                ),
+                SizedBox(height: tokens.space4),
 
-              TextButton(
-                onPressed: () {
-                  setState(() {
-                    _enteredPin = '';
-                    _confirmedPin = '';
-                    _isConfirmingPin = false;
-                  });
-                  _transitionToStage(2);
-                },
-                child: Text('Back to Currency', style: GoogleFonts.mukta(color: mutedColor, fontSize: 13)),
-              ),
-            ],
+                // Responsive Keypad
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final keyW = ((constraints.maxWidth - 28) / 3).clamp(68.0, 88.0);
+                    return _buildSharpKeypad(tokens, keyWidth: keyW);
+                  },
+                ),
+                SizedBox(height: tokens.space2),
+
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _enteredPin = '';
+                      _confirmedPin = '';
+                      _isConfirmingPin = false;
+                    });
+                    _transitionToStage(2);
+                  },
+                  child: Text('Back to Starting Cash', style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 13)),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -867,170 +968,128 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // STAGE 4: 12-Word Recovery Phrase (Dynamic Fresh Words, Smooth Fade-ins)
+  // STAGE 4: 12-Word Recovery Phrase (Spacious 2-Column Grid)
   // ---------------------------------------------------------------------------
-  Widget _buildStage4RecoverySeed(bool isDark, Color textColor, Color mutedColor) {
+  Widget _buildStage4RecoverySeed(CashIOThemeExtension tokens) {
     return KeyedSubtree(
       key: const ValueKey('stage_4_recovery'),
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: CashIOTokens.space6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSmoothFadeItem(
-                delayMs: 0,
-                child: _buildStepIndicator(4, 4, mutedColor),
-              ),
-              const SizedBox(height: CashIOTokens.space2),
-
-              _buildSmoothFadeItem(
-                delayMs: 150,
-                child: Text(
-                  'Secure your 12-word recovery phrase',
-                  style: GoogleFonts.mukta(
-                    color: textColor,
-                    fontSize: 22,
+          padding: EdgeInsets.symmetric(horizontal: tokens.space5, vertical: tokens.space4),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStepIndicator(4, 5, tokens),
+                SizedBox(height: tokens.space3),
+                Text(
+                  'Save your 12-word recovery key',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textPrimary,
+                    fontSize: 21,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
                   ),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space1),
-
-              _buildSmoothFadeItem(
-                delayMs: 300,
-                child: Text(
-                  'Because Cash-IO is zero-knowledge, this unique seed is the ONLY way to recover your vault if you forget your PIN.',
-                  style: GoogleFonts.mukta(color: mutedColor, fontSize: 13, height: 1.4),
+                const SizedBox(height: 6),
+                Text(
+                  'Cash-IO stores everything locally on your phone. Keep this recovery phrase safe in case you ever forget your PIN.',
+                  style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 13, height: 1.35),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space4),
+                SizedBox(height: tokens.space4),
 
-              // 12-Word Grid
-              _buildSmoothFadeItem(
-                delayMs: 450,
-                child: GridView.builder(
+                GridView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    childAspectRatio: 2.7,
-                    crossAxisSpacing: CashIOTokens.space2,
-                    mainAxisSpacing: CashIOTokens.space2,
+                    crossAxisCount: 2,
+                    childAspectRatio: 3.4,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
                   ),
                   itemCount: _recoveryWords.length,
                   itemBuilder: (ctx, i) {
                     return Container(
-                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      alignment: Alignment.centerLeft,
                       decoration: BoxDecoration(
-                        color: CashIOTokens.darkSurface,
-                        borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
-                        border: Border.all(color: CashIOTokens.darkBorder),
+                        color: tokens.bgSurface,
+                        borderRadius: BorderRadius.circular(tokens.radiusSm),
+                        border: Border.all(color: tokens.borderHairline),
                       ),
-                      child: Text(
-                        '${i + 1}. ${_recoveryWords[i]}',
-                        style: GoogleFonts.mukta(
-                          color: textColor,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          '${(i + 1).toString().padLeft(2, '0')}. ${_recoveryWords[i]}',
+                          style: GoogleFonts.jetBrainsMono(
+                            color: tokens.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     );
                   },
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space4),
+                SizedBox(height: tokens.space3),
 
-              // Actions & Checkbox
-              _buildSmoothFadeItem(
-                delayMs: 600,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
                   children: [
-                    InkWell(
-                      onTap: () {
+                    OutlinedButton.icon(
+                      onPressed: () {
                         Clipboard.setData(ClipboardData(text: _recoveryWords.join(' ')));
                         HapticFeedback.lightImpact();
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text('Recovery seed copied to clipboard.'),
+                            content: Text('Recovery phrase copied to clipboard.'),
                             backgroundColor: CashIOTokens.income,
                             duration: Duration(seconds: 2),
                           ),
                         );
                       },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.copy, size: 16, color: CashIOTokens.brandLight),
-                          const SizedBox(width: CashIOTokens.space1),
-                          Text(
-                            'Copy Seed Phrase',
-                            style: GoogleFonts.mukta(color: CashIOTokens.brandLight, fontSize: 13, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
+                      icon: const Icon(Icons.copy, size: 16),
+                      label: const Text('Copy Phrase'),
                     ),
-                    InkWell(
-                      onTap: () {
+                    OutlinedButton.icon(
+                      onPressed: () {
                         setState(() {
                           _recoveryWords = Bip39Helper.generateMnemonic();
                         });
                         HapticFeedback.selectionClick();
                       },
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.refresh, size: 16, color: CashIOTokens.brandLight),
-                          const SizedBox(width: CashIOTokens.space1),
-                          Text(
-                            'Generate New',
-                            style: GoogleFonts.mukta(color: CashIOTokens.brandLight, fontSize: 13, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('Generate New'),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space3),
+                SizedBox(height: tokens.space2),
 
-              _buildSmoothFadeItem(
-                delayMs: 750,
-                child: CheckboxListTile(
+                CheckboxListTile(
                   contentPadding: EdgeInsets.zero,
                   value: _backedUpPhrase,
-                  activeColor: CashIOTokens.brand,
+                  activeColor: tokens.accent,
                   title: Text(
-                    'I have securely written down this 12-word phrase.',
-                    style: GoogleFonts.mukta(color: textColor, fontSize: 13, fontWeight: FontWeight.w600),
+                    'I have saved or copied my 12-word recovery key.',
+                    style: GoogleFonts.mukta(color: tokens.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
                   ),
-                  onChanged: (val) {
-                    setState(() {
-                      _backedUpPhrase = val ?? false;
-                    });
-                  },
+                  onChanged: (val) => setState(() => _backedUpPhrase = val ?? false),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space5),
+                SizedBox(height: tokens.space4),
 
-              _buildSmoothFadeItem(
-                delayMs: 900,
-                child: SizedBox(
+                SizedBox(
                   width: double.infinity,
+                  height: 48,
                   child: FilledButton(
-                    onPressed: _backedUpPhrase
-                        ? () {
-                            _transitionToStage(5);
-                          }
-                        : null,
-                    child: const Text('Review Profile Summary'),
+                    onPressed: _backedUpPhrase ? () => _transitionToStage(5) : null,
+                    child: const Text('Review & Finish'),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1038,111 +1097,77 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
   }
 
   // ---------------------------------------------------------------------------
-  // STAGE 5: Final Summary to Edit (Smooth Fade-ins)
+  // STAGE 5: Final Summary & Launch
   // ---------------------------------------------------------------------------
-  Widget _buildStage5Summary(bool isDark, Color textColor, Color mutedColor) {
+  Widget _buildStage5Summary(CashIOThemeExtension tokens) {
+    final cashCents = CurrencyUtils.parseToCents(_startingCashCtrl.text.trim());
+    final bankCents = CurrencyUtils.parseToCents(_startingBankCtrl.text.trim());
+    final totalOpeningCents = cashCents + bankCents;
+
     return KeyedSubtree(
       key: const ValueKey('stage_5_summary'),
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: CashIOTokens.space6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSmoothFadeItem(
-                delayMs: 0,
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(CashIOTokens.space2),
-                      decoration: BoxDecoration(
-                        color: CashIOTokens.incomeBg,
-                        borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
-                        border: Border.all(color: CashIOTokens.income.withValues(alpha: 0.4)),
-                      ),
-                      child: const Icon(Icons.check_circle_outline, color: CashIOTokens.income, size: 20),
-                    ),
-                    const SizedBox(width: CashIOTokens.space2),
-                    Text(
-                      'SETUP SUMMARY',
-                      style: GoogleFonts.mukta(
-                        color: CashIOTokens.brandLight,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: CashIOTokens.space2),
-
-              _buildSmoothFadeItem(
-                delayMs: 150,
-                child: Text(
-                  'Review & Confirm Profile',
-                  style: GoogleFonts.mukta(
-                    color: textColor,
-                    fontSize: 24,
+          padding: EdgeInsets.symmetric(horizontal: tokens.space5, vertical: tokens.space4),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStepIndicator(5, 5, tokens),
+                SizedBox(height: tokens.space3),
+                Text(
+                  'Ready to launch your vault',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textPrimary,
+                    fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
                   ),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space1),
-
-              _buildSmoothFadeItem(
-                delayMs: 300,
-                child: Text(
-                  'Verify your configurations. You can tap Edit on any item to adjust it.',
-                  style: GoogleFonts.mukta(color: mutedColor, fontSize: 13),
+                const SizedBox(height: 4),
+                Text(
+                  'Review your setup below or tap Edit on any row to adjust.',
+                  style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 13),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space5),
+                SizedBox(height: tokens.space4),
 
-              _buildSmoothFadeItem(
-                delayMs: 450,
-                child: Container(
+                Container(
                   decoration: BoxDecoration(
-                    color: CashIOTokens.darkSurface,
-                    borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
-                    border: Border.all(color: CashIOTokens.darkBorder),
+                    color: tokens.bgSurface,
+                    borderRadius: BorderRadius.circular(tokens.radiusMd),
+                    border: Border.all(color: tokens.borderHairline),
                   ),
                   child: Column(
                     children: [
                       _buildSummaryRow(
                         icon: Icons.person_outline,
-                        label: 'Profile Name',
-                        value: _nameController.text.trim().isNotEmpty
-                            ? _nameController.text.trim()
-                            : 'Personal Vault',
+                        label: 'Vault & Currency',
+                        value: '${_nameController.text.trim().isEmpty ? "Personal Vault" : _nameController.text.trim()} • $_selectedCurrency',
                         onEdit: () {
                           _isEditingFromSummary = true;
                           _transitionToStage(1);
                         },
-                        textColor: textColor,
-                        mutedColor: mutedColor,
+                        tokens: tokens,
                       ),
-                      const Divider(color: CashIOTokens.darkBorder, height: 1),
-
+                      Divider(color: tokens.borderHairline, height: 1),
                       _buildSummaryRow(
-                        icon: Icons.currency_exchange,
-                        label: 'Base Currency',
-                        value: '$_selectedCurrency (${_getCurrencyName(_selectedCurrency)})',
+                        icon: Icons.account_balance_wallet_outlined,
+                        label: 'Starting Funds & Budgets',
+                        value: totalOpeningCents > 0
+                            ? '${CurrencyUtils.format(totalOpeningCents, currency: _selectedCurrency)}${_createStarterEnvelopes ? " • 50/30/20 Envelopes" : ""}'
+                            : (_createStarterEnvelopes ? '0 Balance • Starter Envelopes Ready' : 'Starting at 0 Balance'),
                         onEdit: () {
                           _isEditingFromSummary = true;
                           _transitionToStage(2);
                         },
-                        textColor: textColor,
-                        mutedColor: mutedColor,
+                        tokens: tokens,
                       ),
-                      const Divider(color: CashIOTokens.darkBorder, height: 1),
-
+                      Divider(color: tokens.borderHairline, height: 1),
                       _buildSummaryRow(
-                        icon: Icons.lock_outline,
-                        label: 'Master PIN',
-                        value: '•••••• (Hardware Salted)',
+                        icon: Icons.fingerprint_rounded,
+                        label: 'Unlock Protection',
+                        value: _enableBiometrics ? 'Fingerprint + 6-Digit PIN' : '6-Digit Master PIN',
                         onEdit: () {
                           _isEditingFromSummary = true;
                           setState(() {
@@ -1152,50 +1177,41 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                           });
                           _transitionToStage(3);
                         },
-                        textColor: textColor,
-                        mutedColor: mutedColor,
+                        tokens: tokens,
                       ),
-                      const Divider(color: CashIOTokens.darkBorder, height: 1),
-
+                      Divider(color: tokens.borderHairline, height: 1),
                       _buildSummaryRow(
                         icon: Icons.vpn_key_outlined,
-                        label: 'Recovery Seed',
-                        value: '12 Words Generated & Backed Up',
+                        label: 'Recovery Phrase',
+                        value: '12 Words Saved',
                         onEdit: () {
                           _isEditingFromSummary = true;
                           _transitionToStage(4);
                         },
-                        textColor: textColor,
-                        mutedColor: mutedColor,
+                        tokens: tokens,
                       ),
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space6),
+                SizedBox(height: tokens.space5),
 
-              _buildSmoothFadeItem(
-                delayMs: 650,
-                child: SizedBox(
+                SizedBox(
                   width: double.infinity,
+                  height: 50,
                   child: FilledButton.icon(
                     onPressed: _isInitializing ? null : _commitAndLaunchVault,
                     icon: _isInitializing
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 18,
                             height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: CashIOTokens.darkBg),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: tokens.bgPrimary),
                           )
-                        : const Icon(Icons.lock_open, size: 20),
-                    label: Text(_isInitializing ? 'INITIALIZING VAULT...' : 'COMMIT & LAUNCH VAULT'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: CashIOTokens.space4),
-                    ),
+                        : const Icon(Icons.lock_open_rounded, size: 20),
+                    label: Text(_isInitializing ? 'OPENING VAULT...' : 'LAUNCH MY VAULT'),
                   ),
                 ),
-              ),
-              const SizedBox(height: CashIOTokens.space4),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1207,77 +1223,60 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     required String label,
     required String value,
     required VoidCallback onEdit,
-    required Color textColor,
-    required Color mutedColor,
+    required CashIOThemeExtension tokens,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: CashIOTokens.space4,
-        vertical: CashIOTokens.space3,
-      ),
+      padding: EdgeInsets.symmetric(horizontal: tokens.space4, vertical: tokens.space3),
       child: Row(
         children: [
-          Icon(icon, size: 20, color: CashIOTokens.brandLight),
-          const SizedBox(width: CashIOTokens.space3),
+          Icon(icon, size: 20, color: tokens.accent),
+          SizedBox(width: tokens.space3),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: GoogleFonts.mukta(color: mutedColor, fontSize: 12, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 1),
-                Text(value, style: GoogleFonts.mukta(color: textColor, fontSize: 15, fontWeight: FontWeight.w700)),
+                Text(label, style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12, fontWeight: FontWeight.w600)),
+                Text(
+                  value,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.mukta(color: tokens.textPrimary, fontSize: 14, fontWeight: FontWeight.w700),
+                ),
               ],
             ),
           ),
-          InkWell(
-            onTap: onEdit,
-            borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: CashIOTokens.space2, vertical: 4),
-              decoration: BoxDecoration(
-                border: Border.all(color: CashIOTokens.brand.withValues(alpha: 0.5)),
-                borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
-              ),
-              child: Text(
-                'Edit',
-                style: GoogleFonts.mukta(color: CashIOTokens.brandLight, fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-            ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onEdit,
+            style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+            child: Text('Edit', style: GoogleFonts.mukta(color: tokens.accent, fontWeight: FontWeight.w700)),
           ),
         ],
       ),
     );
   }
 
-  String _getCurrencyName(String code) {
-    try {
-      return CurrencyUtils.supportedCurrencies.firstWhere((c) => c['code'] == code)['name']!;
-    } catch (_) {
-      return code;
-    }
-  }
-
-  Widget _buildStepIndicator(int current, int total, Color mutedColor) {
+  Widget _buildStepIndicator(int current, int total, CashIOThemeExtension tokens) {
     return Row(
       children: [
         Text(
           'STEP $current OF $total',
-          style: GoogleFonts.mukta(
-            color: CashIOTokens.brandLight,
-            fontSize: 12,
+          style: GoogleFonts.spaceGrotesk(
+            color: tokens.accent,
+            fontSize: 11,
             fontWeight: FontWeight.w800,
-            letterSpacing: 1.2,
+            letterSpacing: 1.0,
           ),
         ),
-        const SizedBox(width: CashIOTokens.space2),
+        SizedBox(width: tokens.space3),
         Expanded(
-          child: Container(
-            height: 2,
-            color: CashIOTokens.darkBorder,
-            child: FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: current / total,
-              child: Container(color: CashIOTokens.brand),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
+              value: current / total,
+              minHeight: 3,
+              backgroundColor: tokens.borderHairline,
+              valueColor: AlwaysStoppedAnimation<Color>(tokens.accent),
             ),
           ),
         ),
@@ -1285,64 +1284,56 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
-  /// Stable stage item (prevents rebuild-refresh flickers on button clicks & keystrokes)
-  Widget _buildSmoothFadeItem({required int delayMs, required Widget child}) {
-    return child;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Sharp Tactile Keypad
-  // ---------------------------------------------------------------------------
-  Widget _buildSharpKeypad(bool isDark, Color textColor) {
+  Widget _buildSharpKeypad(CashIOThemeExtension tokens, {required double keyWidth}) {
     return Column(
       children: [
-        _buildKeypadRow(['1', '2', '3'], isDark, textColor),
-        const SizedBox(height: CashIOTokens.space2),
-        _buildKeypadRow(['4', '5', '6'], isDark, textColor),
-        const SizedBox(height: CashIOTokens.space2),
-        _buildKeypadRow(['7', '8', '9'], isDark, textColor),
-        const SizedBox(height: CashIOTokens.space2),
+        _buildKeypadRow(['1', '2', '3'], tokens, keyWidth: keyWidth),
+        const SizedBox(height: 8),
+        _buildKeypadRow(['4', '5', '6'], tokens, keyWidth: keyWidth),
+        const SizedBox(height: 8),
+        _buildKeypadRow(['7', '8', '9'], tokens, keyWidth: keyWidth),
+        const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(width: 80),
-            _buildDigitKey('0', isDark, textColor),
-            _buildDeleteKey(isDark),
+            SizedBox(width: keyWidth + 8),
+            _buildDigitKey('0', tokens, keyWidth: keyWidth),
+            _buildDeleteKey(tokens, keyWidth: keyWidth),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildKeypadRow(List<String> digits, bool isDark, Color textColor) {
+  Widget _buildKeypadRow(List<String> digits, CashIOThemeExtension tokens, {required double keyWidth}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: digits.map((d) => _buildDigitKey(d, isDark, textColor)).toList(),
+      children: digits.map((d) => _buildDigitKey(d, tokens, keyWidth: keyWidth)).toList(),
     );
   }
 
-  Widget _buildDigitKey(String digit, bool isDark, Color textColor) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: CashIOTokens.space1),
+  Widget _buildDigitKey(String digit, CashIOThemeExtension tokens, {required double keyWidth}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Material(
-        color: Colors.transparent,
+        color: tokens.bgSurface,
+        borderRadius: BorderRadius.circular(tokens.radiusSm),
         child: InkWell(
           onTap: () => _onPinDigit(digit),
-          borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
+          borderRadius: BorderRadius.circular(tokens.radiusSm),
           child: Container(
-            width: 76,
-            height: 52,
+            width: keyWidth,
+            height: 50,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: CashIOTokens.darkSurface,
-              borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
-              border: Border.all(color: CashIOTokens.darkBorder),
+              borderRadius: BorderRadius.circular(tokens.radiusSm),
+              border: Border.all(color: tokens.borderHairline),
             ),
             child: Text(
               digit,
-              style: GoogleFonts.mukta(
-                color: textColor,
-                fontSize: 22,
+              style: GoogleFonts.jetBrainsMono(
+                color: tokens.textPrimary,
+                fontSize: 20,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -1352,24 +1343,24 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
-  Widget _buildDeleteKey(bool isDark) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: CashIOTokens.space1),
+  Widget _buildDeleteKey(CashIOThemeExtension tokens, {required double keyWidth}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Material(
-        color: Colors.transparent,
+        color: tokens.bgSurface,
+        borderRadius: BorderRadius.circular(tokens.radiusSm),
         child: InkWell(
           onTap: _onPinDelete,
-          borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
+          borderRadius: BorderRadius.circular(tokens.radiusSm),
           child: Container(
-            width: 76,
-            height: 52,
+            width: keyWidth,
+            height: 50,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: CashIOTokens.darkSurface,
-              borderRadius: BorderRadius.circular(CashIOTokens.radiusSm),
-              border: Border.all(color: CashIOTokens.darkBorder),
+              borderRadius: BorderRadius.circular(tokens.radiusSm),
+              border: Border.all(color: tokens.borderHairline),
             ),
-            child: const Icon(Icons.backspace_outlined, size: 20, color: CashIOTokens.brandLight),
+            child: Icon(Icons.backspace_outlined, size: 20, color: tokens.accent),
           ),
         ),
       ),

@@ -7,8 +7,12 @@ import '../../../core/storage/vault_repository.dart';
 import '../../../core/sync/google_drive_service.dart';
 import '../../../core/backup/cashio_backup_manager.dart';
 import '../../../core/security/clipboard_sanitizer.dart';
+import '../../../core/security/hardware_vault_service.dart';
+import '../../../core/services/update_receiver_service.dart';
+import '../../profile_setup/presentation/quick_financial_setup_sheet.dart';
 import '../../subscriptions/presentation/recurring_bills_sheet.dart';
 import '../../fx/presentation/fx_converter_sheet.dart';
+import '../../vaults/presentation/vault_switcher_sheet.dart';
 import 'update_receiver_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -22,6 +26,19 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _biometricsEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBiometricsPref();
+  }
+
+  Future<void> _loadBiometricsPref() async {
+    final enabled = await HardwareVaultService.instance.getBiometricsEnabled();
+    if (mounted) {
+      setState(() => _biometricsEnabled = enabled);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -84,6 +101,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           children: [
                             Text(
                               repo.profileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.mukta(
                                 color: tokens.textPrimary,
                                 fontSize: 16,
@@ -91,14 +110,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                             ),
                             Text(
-                              'Base Currency: ${repo.baseCurrency} • AES-256-GCM Vault',
+                              'Base Currency: ${repo.baseCurrency} • Encrypted Vault',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(width: 8),
                       OutlinedButton(
-                        onPressed: () => _showProfileSwitcherSheet(context),
+                        onPressed: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (ctx) => const VaultSwitcherSheet(),
+                          );
+                        },
                         style: OutlinedButton.styleFrom(
                           padding: EdgeInsets.symmetric(horizontal: tokens.space3),
                           shape: RoundedRectangleBorder(
@@ -135,8 +164,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             borderRadius: BorderRadius.circular(tokens.radiusMd),
                             border: Border.all(color: tokens.borderHairline),
                           ),
-                          child: Column(
-                            children: [
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(tokens.radiusMd),
+                            clipBehavior: Clip.antiAlias,
+                            child: Column(
+                              children: [
                               ListTile(
                                 leading: Icon(
                                   drive.isConnected ? Icons.cloud_done : Icons.cloud_queue,
@@ -201,6 +234,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 onTap: () => _showCrdtInspectorSheet(context),
                               ),
                             ],
+                            ),
                           ),
                         );
                       },
@@ -223,27 +257,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         borderRadius: BorderRadius.circular(tokens.radiusMd),
                         border: Border.all(color: tokens.borderHairline),
                       ),
-                      child: Column(
-                        children: [
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(tokens.radiusMd),
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
                           SwitchListTile(
-                            secondary: Icon(Icons.fingerprint, color: tokens.accentGold),
+                            secondary: Icon(Icons.fingerprint_rounded, color: tokens.accentGold),
                             title: Text(
-                              'Biometric Authentication',
+                              'Fingerprint & Biometric Sign-In',
                               style: GoogleFonts.mukta(
                                 color: tokens.textPrimary,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
                             subtitle: Text(
-                              'FaceID / Fingerprint unlock',
+                              'Prompt fingerprint sensor automatically on lock screen',
                               style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
                             ),
                             value: _biometricsEnabled,
                             activeTrackColor: tokens.accentGold,
-                            onChanged: (val) {
+                            onChanged: (val) async {
                               setState(() {
                                 _biometricsEnabled = val;
                               });
+                              await HardwareVaultService.instance.setBiometricsEnabled(val);
+                            },
+                          ),
+                          Divider(height: 1, color: tokens.borderSubtle),
+                          ListTile(
+                            leading: Icon(Icons.account_balance_wallet_outlined, color: tokens.statusIncome),
+                            title: Text(
+                              'Quick Setup: Starting Cash & Budgets',
+                              style: GoogleFonts.mukta(
+                                color: tokens.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Set opening cash, bank balance, and starter envelopes',
+                              style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                            ),
+                            trailing: Icon(Icons.chevron_right, color: tokens.textTertiary),
+                            onTap: () {
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                backgroundColor: Colors.transparent,
+                                builder: (ctx) => const QuickFinancialSetupSheet(),
+                              );
                             },
                           ),
                           Divider(height: 1, color: tokens.borderSubtle),
@@ -288,6 +351,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             onTap: () => _showRecoveryPhraseSheet(context),
                           ),
                         ],
+                        ),
                       ),
                     ),
                   ],
@@ -308,8 +372,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         borderRadius: BorderRadius.circular(tokens.radiusMd),
                         border: Border.all(color: tokens.borderHairline),
                       ),
-                      child: Column(
-                        children: [
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(tokens.radiusMd),
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
+                          children: [
                           ListTile(
                             leading: Icon(Icons.file_download_outlined, color: tokens.accentGold),
                             title: Text(
@@ -452,6 +520,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             },
                           ),
                         ],
+                        ),
                       ),
                     ),
                   ],
@@ -466,7 +535,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   child: Column(
                     children: [
                       Text(
-                        'Cash-IO v1.0.0 (Local-First Edition)',
+                        'Cash-IO v${UpdateReceiverService.instance.currentVersion} (Air-Gapped Edition)',
                         style: GoogleFonts.spaceGrotesk(
                           color: tokens.textTertiary,
                           fontSize: 12,
@@ -505,78 +574,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  void _showProfileSwitcherSheet(BuildContext context) {
-    final repo = VaultRepository.instance;
-    final tokens = context.tokens;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: tokens.bgSurface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(tokens.radiusLg)),
-      ),
-      builder: (ctx) {
-        return Padding(
-          padding: EdgeInsets.all(tokens.space5),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'SWITCH PROFILE VAULT',
-                style: GoogleFonts.spaceGrotesk(
-                  color: tokens.textPrimary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.0,
-                ),
-              ),
-              SizedBox(height: tokens.space4),
-              ListTile(
-                leading: Icon(Icons.check_circle, color: tokens.statusIncome),
-                title: Text(
-                  repo.profileName,
-                  style: GoogleFonts.mukta(fontWeight: FontWeight.w700, color: tokens.textPrimary),
-                ),
-                subtitle: Text(
-                  'Active Encrypted Vault',
-                  style: GoogleFonts.mukta(color: tokens.textSecondary),
-                ),
-              ),
-              ListTile(
-                leading: Icon(Icons.business_outlined, color: tokens.accentGold),
-                title: Text(
-                  'Side Business',
-                  style: GoogleFonts.mukta(fontWeight: FontWeight.w700, color: tokens.textPrimary),
-                ),
-                subtitle: Text(
-                  'Isolated DB • Independent PIN',
-                  style: GoogleFonts.mukta(color: tokens.textSecondary),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  widget.onSwitchProfile?.call();
-                },
-              ),
-              Divider(color: tokens.borderSubtle),
-              ListTile(
-                leading: Icon(Icons.add, color: tokens.accentGold),
-                title: Text(
-                  'Create New Profile Vault',
-                  style: GoogleFonts.mukta(fontWeight: FontWeight.w700, color: tokens.accentChampagne),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  widget.onSwitchProfile?.call();
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   void _showCrdtInspectorSheet(BuildContext context) {
     final repo = VaultRepository.instance;
     final tokens = context.tokens;
@@ -601,23 +598,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 controller: scrollController,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Icon(Icons.hub_outlined, color: tokens.statusIncome, size: 22),
-                          const SizedBox(width: 8),
-                          Text(
-                            'CRDT SYNC INSPECTOR',
-                            style: GoogleFonts.spaceGrotesk(
-                              color: tokens.textPrimary,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.0,
-                            ),
+                      Icon(Icons.hub_outlined, color: tokens.statusIncome, size: 22),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'CRDT SYNC INSPECTOR',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.spaceGrotesk(
+                            color: tokens.textPrimary,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.0,
                           ),
-                        ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
@@ -831,17 +828,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        '12-WORD BIP-39 RECOVERY SEED',
-                        style: GoogleFonts.spaceGrotesk(
-                          color: tokens.textPrimary,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.8,
+                      Expanded(
+                        child: Text(
+                          '12-WORD BIP-39 RECOVERY SEED',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.spaceGrotesk(
+                            color: tokens.textPrimary,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(

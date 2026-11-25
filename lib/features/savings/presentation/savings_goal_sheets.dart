@@ -102,25 +102,30 @@ class _CreateSavingsGoalSheetState extends State<CreateSavingsGoalSheet> {
                   child: Icon(Icons.savings_outlined, color: tokens.statusIncome, size: 24),
                 ),
                 SizedBox(width: tokens.space3),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'CREATE SAVINGS GOAL VAULT',
-                      style: GoogleFonts.spaceGrotesk(
-                        color: tokens.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'CREATE SAVINGS GOAL VAULT',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          color: tokens.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Dedicated capital reserve with lock protection',
-                      style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
-                    ),
-                  ],
+                      Text(
+                        'Dedicated capital reserve with lock protection',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
                 ),
-                const Spacer(),
                 IconButton(
                   icon: Icon(Icons.close, color: tokens.textSecondary, size: 20),
                   onPressed: () => Navigator.pop(context),

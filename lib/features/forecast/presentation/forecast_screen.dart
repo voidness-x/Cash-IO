@@ -93,23 +93,23 @@ class _ForecastScreenState extends State<ForecastScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Row(
-                            children: [
-                              Icon(Icons.timeline_rounded, size: 16, color: tokens.statusIncome),
-                              const SizedBox(width: 6),
-                              Text(
-                                'PROJECTED RUNWAY',
-                                style: GoogleFonts.spaceGrotesk(
-                                  color: tokens.textSecondary,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: 1.2,
-                                ),
+                          Icon(Icons.timeline_rounded, size: 16, color: tokens.statusIncome),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'PROJECTED RUNWAY',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.spaceGrotesk(
+                                color: tokens.textSecondary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.0,
                               ),
-                            ],
+                            ),
                           ),
+                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                             decoration: BoxDecoration(
@@ -118,7 +118,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
                               border: Border.all(color: tokens.statusIncome.withValues(alpha: 0.35)),
                             ),
                             child: Text(
-                              'Air-Gapped Regression',
+                              'Local Regression',
                               style: GoogleFonts.mukta(
                                 color: tokens.statusIncome,
                                 fontSize: 10,
@@ -137,17 +137,21 @@ class _ForecastScreenState extends State<ForecastScreen> {
                             '$runwayDays',
                             style: GoogleFonts.jetBrainsMono(
                               color: tokens.textPrimary,
-                              fontSize: 42,
+                              fontSize: 38,
                               fontWeight: FontWeight.w800,
                             ),
                           ),
                           SizedBox(width: tokens.space2),
-                          Text(
-                            'Days of Expenses Covered',
-                            style: GoogleFonts.mukta(
-                              color: tokens.textSecondary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
+                          Expanded(
+                            child: Text(
+                              'Days of Expenses Covered',
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.mukta(
+                                color: tokens.textSecondary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],
@@ -166,19 +170,23 @@ class _ForecastScreenState extends State<ForecastScreen> {
                                   style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11, fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 2),
-                                Text(
-                                  '-${CurrencyUtils.format(dailyBurnCents, currency: currency)} / day',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    color: tokens.statusExpense,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    '-${CurrencyUtils.format(dailyBurnCents, currency: currency)} / day',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      color: tokens.statusExpense,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           ),
                           Container(width: 1, height: 28, color: tokens.borderSubtle),
-                          SizedBox(width: tokens.space4),
+                          SizedBox(width: tokens.space3),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -188,12 +196,16 @@ class _ForecastScreenState extends State<ForecastScreen> {
                                   style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11, fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 2),
-                                Text(
-                                  '${netDailyCents >= 0 ? '+' : ''}${CurrencyUtils.format(netDailyCents, currency: currency)} / day',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    color: netDailyCents >= 0 ? tokens.statusIncome : tokens.statusExpense,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 13,
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    '${netDailyCents >= 0 ? '+' : ''}${CurrencyUtils.format(netDailyCents, currency: currency)} / day',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      color: netDailyCents >= 0 ? tokens.statusIncome : tokens.statusExpense,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -221,19 +233,23 @@ class _ForecastScreenState extends State<ForecastScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            'INTERACTIVE RUNWAY SCRUBBER',
-                            style: GoogleFonts.spaceGrotesk(
-                              color: tokens.textSecondary,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.0,
+                          Expanded(
+                            child: Text(
+                              'INTERACTIVE RUNWAY SCRUBBER',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.spaceGrotesk(
+                                color: tokens.textSecondary,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1.0,
+                              ),
                             ),
                           ),
+                          const SizedBox(width: 8),
                           Text(
-                            'Drag along curve to inspect',
+                            'Drag to inspect',
                             style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
                           ),
                         ],
@@ -249,35 +265,43 @@ class _ForecastScreenState extends State<ForecastScreen> {
                           border: Border.all(color: tokens.borderHairline),
                         ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'PROJECTION: +$scrubbedDay DAYS',
-                                  style: GoogleFonts.spaceGrotesk(
-                                    color: tokens.accentGold,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.8,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'PROJECTION: +$scrubbedDay DAYS',
+                                    style: GoogleFonts.spaceGrotesk(
+                                      color: tokens.accentGold,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.8,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  '${_monthName(scrubbedDate.month)} ${scrubbedDate.day}, ${scrubbedDate.year}',
-                                  style: GoogleFonts.mukta(
-                                    color: tokens.textSecondary,
-                                    fontSize: 12,
+                                  Text(
+                                    '${_monthName(scrubbedDate.month)} ${scrubbedDate.day}, ${scrubbedDate.year}',
+                                    style: GoogleFonts.mukta(
+                                      color: tokens.textSecondary,
+                                      fontSize: 12,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                            Text(
-                              CurrencyUtils.format(scrubbedBalanceCents, currency: currency),
-                              style: GoogleFonts.jetBrainsMono(
-                                color: scrubbedBalanceCents >= 0 ? tokens.statusIncome : tokens.statusExpense,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w800,
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerRight,
+                                child: Text(
+                                  CurrencyUtils.format(scrubbedBalanceCents, currency: currency),
+                                  style: GoogleFonts.jetBrainsMono(
+                                    color: scrubbedBalanceCents >= 0 ? tokens.statusIncome : tokens.statusExpense,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
                               ),
                             ),
                           ],
@@ -476,68 +500,83 @@ class _ForecastScreenState extends State<ForecastScreen> {
           border: Border.all(color: tokens.borderHairline),
         ),
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: tokens.statusIncome.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(tokens.radiusSm),
-                    border: Border.all(color: tokens.statusIncome.withValues(alpha: 0.3)),
-                  ),
-                  child: Text(
-                    days.split(' ')[0],
-                    style: GoogleFonts.jetBrainsMono(
-                      color: tokens.statusIncome,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
+            Expanded(
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: tokens.statusIncome.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(tokens.radiusSm),
+                      border: Border.all(color: tokens.statusIncome.withValues(alpha: 0.3)),
                     ),
-                  ),
-                ),
-                SizedBox(width: tokens.space3),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      days,
-                      style: GoogleFonts.mukta(
-                        color: tokens.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
+                    child: Text(
+                      days.split(' ')[0],
+                      style: GoogleFonts.jetBrainsMono(
+                        color: tokens.statusIncome,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
                       ),
                     ),
-                    Text(
-                      date,
-                      style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 11),
+                  ),
+                  SizedBox(width: tokens.space3),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          days,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.mukta(
+                            color: tokens.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          date,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 11),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  CurrencyUtils.format(projectedCents, currency: currency),
-                  style: GoogleFonts.jetBrainsMono(
-                    color: isPositive ? tokens.statusIncome : tokens.statusExpense,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
+            const SizedBox(width: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 135),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      CurrencyUtils.format(projectedCents, currency: currency),
+                      style: GoogleFonts.jetBrainsMono(
+                        color: isPositive ? tokens.statusIncome : tokens.statusExpense,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
-                ),
-                Text(
-                  isPositive ? 'Surplus Runway' : 'Deficit Risk',
-                  style: GoogleFonts.spaceGrotesk(
-                    color: isPositive ? tokens.statusIncome : tokens.statusExpense,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
+                  Text(
+                    isPositive ? 'Surplus Runway' : 'Deficit Risk',
+                    style: GoogleFonts.spaceGrotesk(
+                      color: isPositive ? tokens.statusIncome : tokens.statusExpense,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),

@@ -80,23 +80,23 @@ class _CategorySpendingDonutCardState extends State<CategorySpendingDonutCard> w
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.pie_chart_outline_rounded, size: 16, color: tokens.accentGold),
-                  const SizedBox(width: 8),
-                  Text(
-                    'SPENDING BY CATEGORY',
-                    style: GoogleFonts.spaceGrotesk(
-                      color: tokens.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                    ),
+              Icon(Icons.pie_chart_outline_rounded, size: 16, color: tokens.accentGold),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'SPENDING BY CATEGORY',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.0,
                   ),
-                ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -184,14 +184,17 @@ class _CategorySpendingDonutCardState extends State<CategorySpendingDonutCard> w
                                 ),
                               ),
                               const SizedBox(height: 2),
-                              Text(
-                                _hoveredIndex != null && _hoveredIndex! < entries.length
-                                    ? CurrencyUtils.format(entries[_hoveredIndex!].value, currency: widget.currency)
-                                    : CurrencyUtils.format(totalSpentCents, currency: widget.currency),
-                                style: GoogleFonts.jetBrainsMono(
-                                  color: tokens.textPrimary,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w800,
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  _hoveredIndex != null && _hoveredIndex! < entries.length
+                                      ? CurrencyUtils.format(entries[_hoveredIndex!].value, currency: widget.currency)
+                                      : CurrencyUtils.format(totalSpentCents, currency: widget.currency),
+                                  style: GoogleFonts.jetBrainsMono(
+                                    color: tokens.textPrimary,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                  ),
                                 ),
                               ),
                               if (_hoveredIndex != null && _hoveredIndex! < entries.length)
@@ -257,12 +260,16 @@ class _CategorySpendingDonutCardState extends State<CategorySpendingDonutCard> w
                           ),
                         ),
                         const SizedBox(width: 6),
-                        Text(
-                          cat.key,
-                          style: GoogleFonts.mukta(
-                            color: isSelected ? tokens.textPrimary : tokens.textSecondary,
-                            fontSize: 12,
-                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                        Flexible(
+                          child: Text(
+                            cat.key,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.mukta(
+                              color: isSelected ? tokens.textPrimary : tokens.textSecondary,
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),

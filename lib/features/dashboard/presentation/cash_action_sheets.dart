@@ -32,7 +32,10 @@ class _AddCashSheetState extends State<AddCashSheet> {
     'Other',
   ];
 
-  final List<int> _quickIncrements = [10, 50, 100, 500, 1000];
+  List<int> get _quickIncrements =>
+      widget.baseCurrency == 'IQD' ? const [5000, 10000, 25000, 50000, 100000] : const [10, 50, 100, 500, 1000];
+
+  String _formatChip(int inc) => inc >= 1000 ? '+${(inc / 1000).toStringAsFixed(0)}K' : '+$inc';
 
   @override
   void initState() {
@@ -185,28 +188,33 @@ class _AddCashSheetState extends State<AddCashSheet> {
                   child: Icon(Icons.add_rounded, color: tokens.statusIncome, size: 24),
                 ),
                 SizedBox(width: tokens.space3),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'ADD CASH',
-                      style: GoogleFonts.spaceGrotesk(
-                        color: tokens.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.0,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'ADD CASH',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          color: tokens.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Deposit funds into your air-gapped vault',
-                      style: GoogleFonts.mukta(
-                        color: tokens.textSecondary,
-                        fontSize: 12,
+                      Text(
+                        'Deposit funds into your air-gapped vault',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.mukta(
+                          color: tokens.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                const Spacer(),
                 IconButton(
                   icon: Icon(Icons.close, color: tokens.textSecondary, size: 20),
                   onPressed: () => Navigator.pop(context),
@@ -278,7 +286,7 @@ class _AddCashSheetState extends State<AddCashSheet> {
                       border: Border.all(color: tokens.borderHairline),
                     ),
                     child: Text(
-                      '+$inc',
+                      _formatChip(inc),
                       style: GoogleFonts.jetBrainsMono(
                         color: tokens.accentGold,
                         fontSize: 12,
@@ -440,7 +448,10 @@ class _SpendCashSheetState extends State<SpendCashSheet> {
     'General Expenses',
   ];
 
-  final List<int> _quickIncrements = [5, 10, 20, 50, 100];
+  List<int> get _quickIncrements =>
+      widget.baseCurrency == 'IQD' ? const [2000, 5000, 10000, 25000, 50000] : const [5, 10, 20, 50, 100];
+
+  String _formatSpendChip(int inc) => inc >= 1000 ? '+${(inc / 1000).toStringAsFixed(0)}K' : '+$inc';
 
   @override
   void initState() {
@@ -592,28 +603,33 @@ class _SpendCashSheetState extends State<SpendCashSheet> {
                   child: Icon(Icons.remove_rounded, color: tokens.statusExpense, size: 24),
                 ),
                 SizedBox(width: tokens.space3),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'SPEND CASH',
-                      style: GoogleFonts.spaceGrotesk(
-                        color: tokens.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.0,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'SPEND CASH',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          color: tokens.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Record an expense or payment from your vault',
-                      style: GoogleFonts.mukta(
-                        color: tokens.textSecondary,
-                        fontSize: 12,
+                      Text(
+                        'Record an expense or payment from your vault',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.mukta(
+                          color: tokens.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                const Spacer(),
                 IconButton(
                   icon: Icon(Icons.close, color: tokens.textSecondary, size: 20),
                   onPressed: () => Navigator.pop(context),
@@ -685,7 +701,7 @@ class _SpendCashSheetState extends State<SpendCashSheet> {
                       border: Border.all(color: tokens.borderHairline),
                     ),
                     child: Text(
-                      '+$inc',
+                      _formatSpendChip(inc),
                       style: GoogleFonts.jetBrainsMono(
                         color: tokens.statusExpense,
                         fontSize: 12,

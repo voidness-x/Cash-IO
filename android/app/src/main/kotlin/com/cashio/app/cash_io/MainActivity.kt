@@ -3,23 +3,102 @@ package com.cashio.app.cash_io
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
-import io.flutter.embedding.android.FlutterActivity
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
+import androidx.core.content.ContextCompat
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.util.concurrent.atomic.AtomicBoolean
 
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
     companion object {
         private const val OTA_CHANNEL = "com.cashio.app/ota_installer"
+        private const val BIOMETRIC_CHANNEL = "com.cashio.app/biometrics"
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        // 1. Hardware Biometric / Fingerprint Authentication Channel
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BIOMETRIC_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "isBiometricAvailable" -> {
+                        try {
+                            val manager = BiometricManager.from(this)
+                            val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                                BiometricManager.Authenticators.BIOMETRIC_WEAK
+                            val canAuth = manager.canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
+                            result.success(canAuth)
+                        } catch (_: Exception) {
+                            result.success(false)
+                        }
+                    }
+
+                    "authenticate" -> {
+                        val title = call.argument<String>("title") ?: "Unlock Cash-IO Vault"
+                        val subtitle = call.argument<String>("subtitle") ?: "Touch the fingerprint sensor to sign in"
+                        val cancelText = call.argument<String>("cancelText") ?: "Use 6-Digit PIN"
+                        val responded = AtomicBoolean(false)
+
+                        try {
+                            val authenticators = BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                                BiometricManager.Authenticators.BIOMETRIC_WEAK
+                            val manager = BiometricManager.from(this)
+                            if (manager.canAuthenticate(authenticators) != BiometricManager.BIOMETRIC_SUCCESS) {
+                                if (responded.compareAndSet(false, true)) {
+                                    result.success(false)
+                                }
+                                return@setMethodCallHandler
+                            }
+
+                            val executor = ContextCompat.getMainExecutor(this)
+                            val biometricPrompt = BiometricPrompt(
+                                this,
+                                executor,
+                                object : BiometricPrompt.AuthenticationCallback() {
+                                    override fun onAuthenticationSucceeded(authResult: BiometricPrompt.AuthenticationResult) {
+                                        super.onAuthenticationSucceeded(authResult)
+                                        if (responded.compareAndSet(false, true)) {
+                                            result.success(true)
+                                        }
+                                    }
+
+                                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                                        super.onAuthenticationError(errorCode, errString)
+                                        if (responded.compareAndSet(false, true)) {
+                                            result.success(false)
+                                        }
+                                    }
+                                }
+                            )
+
+                            val promptInfo = BiometricPrompt.PromptInfo.Builder()
+                                .setTitle(title)
+                                .setSubtitle(subtitle)
+                                .setNegativeButtonText(cancelText)
+                                .setAllowedAuthenticators(authenticators)
+                                .setConfirmationRequired(false)
+                                .build()
+
+                            biometricPrompt.authenticate(promptInfo)
+                        } catch (_: Exception) {
+                            if (responded.compareAndSet(false, true)) {
+                                result.success(false)
+                            }
+                        }
+                    }
+
+                    else -> result.notImplemented()
+                }
+            }
+
+        // 2. GitHub Releases OTA System Updater Channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, OTA_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "canInstallPackages" -> {
-                        // System browser / DownloadManager handles Play-Protect-safe APK installation
                         result.success(true)
                     }
 
@@ -57,7 +136,7 @@ class MainActivity : FlutterActivity() {
                             }
                             result.success(
                                 mapOf(
-                                    "versionName" to (pInfo.versionName ?: "3.0.1"),
+                                    "versionName" to (pInfo.versionName ?: "3.1.0"),
                                     "versionCode" to vCode
                                 )
                             )

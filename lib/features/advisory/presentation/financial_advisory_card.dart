@@ -39,46 +39,37 @@ class FinancialAdvisoryCard extends StatelessWidget {
         color: tokens.bgSurface,
         borderRadius: BorderRadius.circular(tokens.radiusMd),
         border: Border.all(color: tokens.borderHairline),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
-      padding: EdgeInsets.all(tokens.space5),
+      padding: EdgeInsets.all(tokens.space4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header Bar
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Icon(Icons.auto_awesome, size: 16, color: tokens.statusIncome),
-                  const SizedBox(width: 8),
-                  Text(
-                    'FINANCIAL INTELLIGENCE',
-                    style: GoogleFonts.spaceGrotesk(
-                      color: tokens.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                    ),
+              Icon(Icons.auto_awesome, size: 16, color: tokens.statusIncome),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'FINANCIAL GUIDANCE',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
                   ),
-                ],
+                ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: tokens.statusIncome.withValues(alpha: 0.15),
+                  color: tokens.statusIncome.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(tokens.radiusPill),
-                  border: Border.all(color: tokens.statusIncome.withValues(alpha: 0.3)),
                 ),
                 child: Text(
-                  '100% On-Device',
+                  'On-Device',
                   style: GoogleFonts.mukta(
                     color: tokens.statusIncome,
                     fontSize: 10,
@@ -88,34 +79,9 @@ class FinancialAdvisoryCard extends StatelessWidget {
               ),
             ],
           ),
-          SizedBox(height: tokens.space4),
+          SizedBox(height: tokens.space3),
 
-          // 50/30/20 Segmented Metric Strip
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '50/30/20 CASHFLOW BALANCE',
-                style: GoogleFonts.spaceGrotesk(
-                  color: tokens.textTertiary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.8,
-                ),
-              ),
-              Text(
-                'Needs: $needsPct% • Wants: $wantsPct% • Savings: $savingsPct%',
-                style: GoogleFonts.jetBrainsMono(
-                  color: tokens.textSecondary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: tokens.space2),
-
-          // Segmented Progress Bar
+          // 50/30/20 Segmented Bar + Wrap Legend (Never Overflows on Small Phones)
           ClipRRect(
             borderRadius: BorderRadius.circular(tokens.radiusPill),
             child: SizedBox(
@@ -130,22 +96,32 @@ class FinancialAdvisoryCard extends StatelessWidget {
                   if (wantsPct > 0)
                     Expanded(
                       flex: wantsPct,
-                      child: Container(color: tokens.statusExpense.withValues(alpha: 0.8)),
+                      child: Container(color: tokens.statusExpense.withValues(alpha: 0.85)),
                     ),
-                  if (savingsPct > 0)
+                  if (savingsPct > 0 || (needsPct == 0 && wantsPct == 0))
                     Expanded(
-                      flex: savingsPct,
+                      flex: savingsPct > 0 ? savingsPct : 100,
                       child: Container(color: tokens.accentGold),
                     ),
                 ],
               ),
             ),
           ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            children: [
+              _buildRatioDot('Needs $needsPct%', tokens.statusIncome, tokens),
+              _buildRatioDot('Wants $wantsPct%', tokens.statusExpense, tokens),
+              _buildRatioDot('Savings $savingsPct%', tokens.accentGold, tokens),
+            ],
+          ),
           SizedBox(height: tokens.space3),
 
           // Runway & Solvency Quick Pill
           Container(
-            padding: EdgeInsets.symmetric(horizontal: tokens.space3, vertical: tokens.space2),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: tokens.bgSurfaceElevated,
               borderRadius: BorderRadius.circular(tokens.radiusSm),
@@ -156,9 +132,7 @@ class FinancialAdvisoryCard extends StatelessWidget {
                 Icon(
                   runway.tier == RunwayTier.critical
                       ? Icons.warning_amber_rounded
-                      : (runway.tier == RunwayTier.fortified
-                          ? Icons.verified_user_outlined
-                          : Icons.shield_outlined),
+                      : Icons.shield_outlined,
                   size: 16,
                   color: runway.tier == RunwayTier.critical
                       ? tokens.statusExpense
@@ -167,7 +141,9 @@ class FinancialAdvisoryCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Runway: ${runway.runwayMonths.toStringAsFixed(1)} Months (${runway.tier.name.toUpperCase()})',
+                    'Runway: ${runway.runwayMonths.toStringAsFixed(1)} mo (${runway.tier.name.toUpperCase()})',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.mukta(
                       color: tokens.textPrimary,
                       fontWeight: FontWeight.w600,
@@ -175,28 +151,35 @@ class FinancialAdvisoryCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                Text(
-                  CurrencyUtils.format(runway.liquidAssetsCents, currency: repo.baseCurrency),
-                  style: GoogleFonts.jetBrainsMono(
-                    color: tokens.textPrimary,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 120),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      CurrencyUtils.format(runway.liquidAssetsCents, currency: repo.baseCurrency),
+                      style: GoogleFonts.jetBrainsMono(
+                        color: tokens.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
           ),
 
-          // Top Actionable Advisory Card
           if (topSuggestion != null) ...[
             SizedBox(height: tokens.space3),
             Container(
               padding: EdgeInsets.all(tokens.space3),
               decoration: BoxDecoration(
-                color: _getSeverityColor(topSuggestion.severity, tokens).withValues(alpha: 0.1),
+                color: _getSeverityColor(topSuggestion.severity, tokens).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(tokens.radiusSm),
                 border: Border.all(
-                  color: _getSeverityColor(topSuggestion.severity, tokens).withValues(alpha: 0.35),
+                  color: _getSeverityColor(topSuggestion.severity, tokens).withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
@@ -207,7 +190,7 @@ class FinancialAdvisoryCard extends StatelessWidget {
                     size: 18,
                     color: _getSeverityColor(topSuggestion.severity, tokens),
                   ),
-                  SizedBox(width: tokens.space3),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -225,7 +208,7 @@ class FinancialAdvisoryCard extends StatelessWidget {
                           topSuggestion.description,
                           style: GoogleFonts.mukta(
                             color: tokens.textSecondary,
-                            fontSize: 11,
+                            fontSize: 12,
                             height: 1.3,
                           ),
                         ),
@@ -246,13 +229,16 @@ class FinancialAdvisoryCard extends StatelessWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  topSuggestion.actionLabel!,
-                                  style: GoogleFonts.spaceGrotesk(
-                                    color: tokens.statusIncome,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 11,
-                                    letterSpacing: 0.5,
+                                Flexible(
+                                  child: Text(
+                                    topSuggestion.actionLabel!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.spaceGrotesk(
+                                      color: tokens.statusIncome,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 11,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: 4),
@@ -270,6 +256,28 @@ class FinancialAdvisoryCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildRatioDot(String label, Color color, CashIOThemeExtension tokens) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 7,
+          height: 7,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: GoogleFonts.mukta(
+            color: tokens.textSecondary,
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
     );
   }
 

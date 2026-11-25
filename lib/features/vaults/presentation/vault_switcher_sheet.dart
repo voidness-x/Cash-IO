@@ -150,32 +150,33 @@ class _VaultSwitcherSheetState extends State<VaultSwitcherSheet> {
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border.all(color: tokens.borderHairline),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: tokens.textTertiary.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: tokens.textTertiary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          SizedBox(height: tokens.space4),
+            SizedBox(height: tokens.space4),
 
-          // Title
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Icon(Icons.layers_outlined, color: tokens.accent, size: 20),
-                  const SizedBox(width: 8),
-                  Text(
+            // Title
+            Row(
+              children: [
+                Icon(Icons.layers_outlined, color: tokens.accent, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
                     'LOCAL CRYPTOGRAPHIC VAULTS',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.spaceGrotesk(
                       color: tokens.textPrimary,
                       fontSize: 14,
@@ -183,14 +184,14 @@ class _VaultSwitcherSheetState extends State<VaultSwitcherSheet> {
                       letterSpacing: 0.8,
                     ),
                   ),
-                ],
-              ),
-              Text(
-                '${_profiles.length} Available',
-                style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
-              ),
-            ],
-          ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '${_profiles.length} Available',
+                  style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
+                ),
+              ],
+            ),
           const SizedBox(height: 6),
           Text(
             'Each vault is an air-gapped cryptographic enclave with an isolated database and PBKDF2 keys.',
@@ -218,7 +219,11 @@ class _VaultSwitcherSheetState extends State<VaultSwitcherSheet> {
                     width: isActive ? 1.5 : 1.0,
                   ),
                 ),
-                child: ListTile(
+                child: Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                  clipBehavior: Clip.antiAlias,
+                  child: ListTile(
                   leading: Container(
                     width: 38,
                     height: 38,
@@ -260,13 +265,14 @@ class _VaultSwitcherSheetState extends State<VaultSwitcherSheet> {
                             ),
                           ),
                         )
-                      : TextButton(
-                          onPressed: () => _promptPinAndSwitch(context, profile),
-                          child: Text(
-                            'Switch →',
-                            style: GoogleFonts.mukta(color: tokens.accent, fontWeight: FontWeight.bold),
+                        : TextButton(
+                            onPressed: () => _promptPinAndSwitch(context, profile),
+                            child: Text(
+                              'Switch →',
+                              style: GoogleFonts.mukta(color: tokens.accent, fontWeight: FontWeight.bold),
+                            ),
                           ),
-                        ),
+                  ),
                 ),
               );
             }),
@@ -312,6 +318,7 @@ class _VaultSwitcherSheetState extends State<VaultSwitcherSheet> {
             ),
           ),
         ],
+      ),
       ),
     );
   }

@@ -342,6 +342,7 @@ class _RecordTransactionSheetState extends State<RecordTransactionSheet> {
             // Source Account Selector (Paid From)
             DropdownButtonFormField<String>(
               initialValue: _sourceAccountId,
+              isExpanded: true,
               decoration: const InputDecoration(
                 labelText: 'Paid From (Source Asset / Account)',
               ),
@@ -350,6 +351,8 @@ class _RecordTransactionSheetState extends State<RecordTransactionSheet> {
                   value: acc.id,
                   child: Text(
                     '${acc.name} (${CurrencyUtils.format(acc.balanceCents, currency: acc.currency)})',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.mukta(fontSize: 13),
                   ),
                 );
@@ -366,12 +369,14 @@ class _RecordTransactionSheetState extends State<RecordTransactionSheet> {
                   activeColor: tokens.accentGold,
                   onChanged: (val) => setState(() => _isSplitTransaction = val ?? false),
                 ),
-                Text(
-                  'Itemize Split Multi-Leg Postings',
-                  style: GoogleFonts.mukta(
-                    color: tokens.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                Expanded(
+                  child: Text(
+                    'Itemize Split Multi-Leg Postings',
+                    style: GoogleFonts.mukta(
+                      color: tokens.textPrimary,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ],
@@ -380,6 +385,7 @@ class _RecordTransactionSheetState extends State<RecordTransactionSheet> {
             if (!_isSplitTransaction) ...[
               DropdownButtonFormField<String>(
                 initialValue: _destinationAccountId,
+                isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Assigned To (Category / Destination Account)',
                 ),
@@ -388,6 +394,8 @@ class _RecordTransactionSheetState extends State<RecordTransactionSheet> {
                     value: acc.id,
                     child: Text(
                       '${acc.name} [${acc.type.name.toUpperCase()}]',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.mukta(fontSize: 13),
                     ),
                   );
@@ -404,11 +412,20 @@ class _RecordTransactionSheetState extends State<RecordTransactionSheet> {
                         flex: 3,
                         child: DropdownButtonFormField<String>(
                           initialValue: _splitItems[idx]['account_id'] as String?,
+                          isExpanded: true,
                           decoration: InputDecoration(
                             labelText: 'Split Leg ${idx + 1}',
                           ),
                           items: accounts.map((acc) {
-                            return DropdownMenuItem(value: acc.id, child: Text(acc.name, style: GoogleFonts.mukta(fontSize: 12)));
+                            return DropdownMenuItem(
+                              value: acc.id,
+                              child: Text(
+                                acc.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.mukta(fontSize: 12),
+                              ),
+                            );
                           }).toList(),
                           onChanged: (val) {
                             setState(() => _splitItems[idx]['account_id'] = val);

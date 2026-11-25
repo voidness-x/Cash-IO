@@ -259,11 +259,11 @@ class UpdateReceiverService extends ChangeNotifier {
   /// Compile-time version injected via `--dart-define` in CI releases
   static const String compiledVersion = String.fromEnvironment(
     'CASHIO_APP_VERSION',
-    defaultValue: '3.0.1',
+    defaultValue: '3.1.0',
   );
   static const int compiledBuild = int.fromEnvironment(
     'CASHIO_BUILD_NUMBER',
-    defaultValue: 30001,
+    defaultValue: 30100,
   );
 
   /// Official upstream repository and release endpoints for Cash-IO

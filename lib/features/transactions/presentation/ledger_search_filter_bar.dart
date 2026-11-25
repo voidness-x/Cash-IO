@@ -208,7 +208,7 @@ class _LedgerSearchFilterBarState extends State<LedgerSearchFilterBar> {
                             style: GoogleFonts.jetBrainsMono(color: tokens.textPrimary, fontSize: 14),
                             decoration: InputDecoration(
                               labelText: 'Min Amount',
-                              prefixText: '\$ ',
+                              prefixText: '${repo.baseCurrency} ',
                               prefixStyle: TextStyle(color: tokens.textTertiary),
                               filled: true,
                               fillColor: tokens.bgCanvas,
@@ -227,7 +227,7 @@ class _LedgerSearchFilterBarState extends State<LedgerSearchFilterBar> {
                             style: GoogleFonts.jetBrainsMono(color: tokens.textPrimary, fontSize: 14),
                             decoration: InputDecoration(
                               labelText: 'Max Amount',
-                              prefixText: '\$ ',
+                              prefixText: '${repo.baseCurrency} ',
                               prefixStyle: TextStyle(color: tokens.textTertiary),
                               filled: true,
                               fillColor: tokens.bgCanvas,

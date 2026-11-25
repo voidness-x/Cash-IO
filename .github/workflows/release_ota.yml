@@ -263,10 +263,10 @@ jobs:
               release_date: $rel_date,
               title: $title,
               changelog: [
-                ("Play-Protect-compliant Android APK (v1+v2+v3 signed, targetSdk 34) & iOS IPA from commit " + $commit + "."),
-                "Automatic startup/resume GitHub Releases OTA update detection & one-tap upgrade.",
-                "Pre-update persistent .cashio.bak snapshot & SHA-256 verification.",
-                "Persistent IndexedDB Web PWA, offline air-gapped resilience & multi-vault enclaves."
+                ("Native Fingerprint / Biometric Sign-In + 6-Digit PIN protection (" + $commit + ")."),
+                "De-cluttered Dashboard & 100% overflow-free responsive mobile cards.",
+                "Guided Starting Cash, Bank Balance & Starter Budgets onboarding + Quick Setup.",
+                "Play-Protect-compliant APK upgrade with pre-update .cashio.bak snapshot."
               ],
               sha256_checksum: $apk_sha,
               is_emergency_patch: false,

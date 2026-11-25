@@ -21,8 +21,36 @@ class HardwareVaultService {
   final Map<String, String> _memoryCache = {};
   final Map<String, int> _failedAttemptsByProfile = {};
   final Map<String, DateTime> _lockoutUntilByProfile = {};
+  bool _biometricsEnabled = true;
+  bool _biometricsPrefLoaded = false;
 
   HardwareVaultService._init();
+
+  /// Reads whether fingerprint / biometric sign-in is enabled (defaults to `true` on supported phones).
+  Future<bool> getBiometricsEnabled() async {
+    if (_biometricsPrefLoaded) return _biometricsEnabled;
+    _biometricsPrefLoaded = true;
+    try {
+      final raw = await _secureStorage
+          .read(key: 'cashio_biometrics_enabled')
+          .timeout(const Duration(milliseconds: 800));
+      if (raw != null) {
+        _biometricsEnabled = raw == 'true';
+      }
+    } catch (_) {}
+    return _biometricsEnabled;
+  }
+
+  /// Persists the user's biometric sign-in preference inside hardware-backed storage.
+  Future<void> setBiometricsEnabled(bool enabled) async {
+    _biometricsEnabled = enabled;
+    _biometricsPrefLoaded = true;
+    try {
+      await _secureStorage
+          .write(key: 'cashio_biometrics_enabled', value: enabled ? 'true' : 'false')
+          .timeout(const Duration(milliseconds: 800));
+    } catch (_) {}
+  }
 
   /// Generates a cryptographically strong 256-bit salt for the profile
   String generateProfileSalt() {

@@ -91,30 +91,35 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   child: Column(
                     children: [
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _buildSummaryColumn(
-                            'LIQUID ASSETS',
-                            CurrencyUtils.format(totalAssets, currency: currency),
-                            tokens.statusIncome,
-                            tokens.textSecondary,
-                            Icons.account_balance_wallet_outlined,
+                          Expanded(
+                            child: _buildSummaryColumn(
+                              'ASSETS',
+                              CurrencyUtils.format(totalAssets, currency: currency),
+                              tokens.statusIncome,
+                              tokens.textSecondary,
+                              Icons.account_balance_wallet_outlined,
+                            ),
                           ),
                           Container(width: 1, height: 42, color: tokens.borderSubtle),
-                          _buildSummaryColumn(
-                            'LIABILITIES',
-                            CurrencyUtils.format(totalLiabilities, currency: currency),
-                            tokens.statusExpense,
-                            tokens.textSecondary,
-                            Icons.credit_card_outlined,
+                          Expanded(
+                            child: _buildSummaryColumn(
+                              'LIABILITIES',
+                              CurrencyUtils.format(totalLiabilities, currency: currency),
+                              tokens.statusExpense,
+                              tokens.textSecondary,
+                              Icons.credit_card_outlined,
+                            ),
                           ),
                           Container(width: 1, height: 42, color: tokens.borderSubtle),
-                          _buildSummaryColumn(
-                            'NET POSITION',
-                            CurrencyUtils.format(netWorth, currency: currency),
-                            netWorth >= 0 ? tokens.statusIncome : tokens.statusExpense,
-                            tokens.textSecondary,
-                            Icons.shield_outlined,
+                          Expanded(
+                            child: _buildSummaryColumn(
+                              'NET WORTH',
+                              CurrencyUtils.format(netWorth, currency: currency),
+                              netWorth >= 0 ? tokens.statusIncome : tokens.statusExpense,
+                              tokens.textSecondary,
+                              Icons.shield_outlined,
+                            ),
                           ),
                         ],
                       ),
@@ -132,13 +137,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
                               children: [
                                 Icon(Icons.sync_alt_rounded, size: 16, color: tokens.accentGold),
                                 const SizedBox(width: 8),
-                                Text(
-                                  'Transfer Between Accounts',
-                                  style: GoogleFonts.spaceGrotesk(
-                                    color: tokens.accentGold,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.5,
+                                Flexible(
+                                  child: Text(
+                                    'Transfer Between Accounts',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.spaceGrotesk(
+                                      color: tokens.accentGold,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.5,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -254,29 +263,37 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   Widget _buildSummaryColumn(String label, String value, Color valueColor, Color labelColor, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, size: 16, color: labelColor),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: GoogleFonts.spaceGrotesk(
-            color: labelColor,
-            fontSize: 9,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.8,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        children: [
+          Icon(icon, size: 16, color: labelColor),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.spaceGrotesk(
+              color: labelColor,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: GoogleFonts.jetBrainsMono(
-            color: valueColor,
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: GoogleFonts.jetBrainsMono(
+                color: valueColor,
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -326,26 +343,32 @@ class _AccountsScreenState extends State<AccountsScreen> {
         Padding(
           padding: EdgeInsets.symmetric(vertical: tokens.space2),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.spaceGrotesk(
-                      color: tokens.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.spaceGrotesk(
+                        color: tokens.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.0,
+                      ),
                     ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
-                  ),
-                ],
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${accounts.length} accounts',
                 style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
@@ -457,6 +480,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 Expanded(
                   child: Text(
                     account.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.mukta(
                       color: tokens.textPrimary,
                       fontWeight: FontWeight.w600,
@@ -465,14 +490,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   ),
                 ),
                 if (percentage != null && percentage > 0) ...[
+                  const SizedBox(width: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                     decoration: BoxDecoration(
                       color: tokens.bgSurfaceElevated,
                       borderRadius: BorderRadius.circular(tokens.radiusXs),
                     ),
                     child: Text(
-                      '${(percentage * 100).toStringAsFixed(0)}% of assets',
+                      '${(percentage * 100).toStringAsFixed(0)}%',
                       style: GoogleFonts.spaceGrotesk(
                         color: tokens.textTertiary,
                         fontSize: 9,
@@ -485,6 +511,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
             ),
             subtitle: Text(
               account.type.name.toUpperCase(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: GoogleFonts.spaceGrotesk(
                 color: tokens.textTertiary,
                 fontSize: 10,
@@ -495,18 +523,26 @@ class _AccountsScreenState extends State<AccountsScreen> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  CurrencyUtils.format(account.balanceCents, currency: account.currency),
-                  style: GoogleFonts.jetBrainsMono(
-                    color: color,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 105),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      CurrencyUtils.format(account.balanceCents, currency: account.currency),
+                      style: GoogleFonts.jetBrainsMono(
+                        color: color,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
                 if (onTransfer != null) ...[
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   IconButton(
                     icon: Icon(Icons.sync_alt_rounded, size: 18, color: tokens.accentGold),
+                    visualDensity: VisualDensity.compact,
                     tooltip: 'Transfer',
                     onPressed: () {
                       HapticFeedback.lightImpact();
@@ -623,12 +659,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     const SizedBox(height: 4),
                     DropdownButtonFormField<AccountModel>(
                       initialValue: currentFrom,
+                      isExpanded: true,
                       dropdownColor: tokens.bgSurfaceElevated,
                       decoration: const InputDecoration(isDense: true),
                       items: assetAccounts.map((a) {
                         return DropdownMenuItem(
                           value: a,
-                          child: Text('${a.name} (${CurrencyUtils.format(a.balanceCents, currency: a.currency)})'),
+                          child: Text(
+                            '${a.name} (${CurrencyUtils.format(a.balanceCents, currency: a.currency)})',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -644,12 +685,17 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     const SizedBox(height: 4),
                     DropdownButtonFormField<AccountModel>(
                       initialValue: currentTo,
+                      isExpanded: true,
                       dropdownColor: tokens.bgSurfaceElevated,
                       decoration: const InputDecoration(isDense: true),
                       items: assetAccounts.where((a) => a.id != currentFrom.id).map((a) {
                         return DropdownMenuItem(
                           value: a,
-                          child: Text('${a.name} (${CurrencyUtils.format(a.balanceCents, currency: a.currency)})'),
+                          child: Text(
+                            '${a.name} (${CurrencyUtils.format(a.balanceCents, currency: a.currency)})',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         );
                       }).toList(),
                       onChanged: (val) {

@@ -509,7 +509,7 @@ class VaultRepository extends ChangeNotifier {
     }
 
     try {
-      // Seed initial double-entry accounts with user's selected base currency
+      // Seed clean foundational double-entry accounts in user's selected base currency
       await addAccount(
         name: 'Cash Wallet',
         type: AccountType.asset,
@@ -538,34 +538,140 @@ class VaultRepository extends ChangeNotifier {
         initialBalanceCents: 0,
         icon: Icons.payments_outlined,
       );
-
-      // Seed initial sample recurring item
-      if (_accounts.length >= 2) {
-        final cashWallet = _accounts.first;
-        final dailyExp = _accounts.firstWhere((a) => a.type == AccountType.expense, orElse: () => cashWallet);
-        _recurringTransactions.add(RecurringTransactionModel(
-          id: 'rec_sample_1',
-          title: 'Internet & Fiber Bill',
-          amountCents: currency == 'IQD' ? 4500000 : 4500,
-          sourceAccountId: cashWallet.id,
-          destinationAccountId: dailyExp.id,
-          interval: RecurringInterval.monthly,
-          nextDueDate: DateTime.now().add(const Duration(days: 3)),
-          isExpense: true,
-          icon: Icons.wifi,
-        ));
-
-        _savingsGoals.add(SavingsGoalModel(
-          id: 'goal_sample_emergency',
-          name: 'Emergency Cushion Reserve',
-          targetAmountCents: currency == 'IQD' ? 150000000 : 150000,
-          currentBalanceCents: currency == 'IQD' ? 45000000 : 45000,
-          targetDate: DateTime.now().add(const Duration(days: 90)),
-          isLocked: true,
-          icon: Icons.shield_outlined,
-        ));
-      }
     } catch (_) {}
+
+    _snapshotCurrentVault();
+    notifyListeners();
+  }
+
+  /// Eases the user into Cash-IO by recording opening Cash & Bank balances via strict
+  /// zero-sum double-entry transactions (`Opening Balances` -> Asset) and optionally
+  /// provisioning 50/30/20 starter budget envelopes and an Emergency Reserve goal vault.
+  Future<void> setupInitialFinancialData({
+    required int startingCashCents,
+    int startingBankCents = 0,
+    bool createStarterEnvelopes = true,
+    int emergencyGoalTargetCents = 0,
+  }) async {
+    final currency = _baseCurrency;
+
+    // Ensure Cash Wallet, Primary Bank, and Opening Balances accounts exist
+    AccountModel? cashAcc = _accounts
+        .where((a) => a.type == AccountType.asset && a.name.toLowerCase().contains('cash'))
+        .firstOrNull;
+    if (cashAcc == null) {
+      await addAccount(
+        name: 'Cash Wallet',
+        type: AccountType.asset,
+        currency: currency,
+        initialBalanceCents: 0,
+        icon: Icons.wallet_outlined,
+      );
+      cashAcc = _accounts.where((a) => a.type == AccountType.asset).first;
+    }
+
+    AccountModel? bankAcc = _accounts
+        .where((a) => a.type == AccountType.asset && a.name.toLowerCase().contains('bank'))
+        .firstOrNull;
+    if (bankAcc == null) {
+      await addAccount(
+        name: 'Primary Bank',
+        type: AccountType.asset,
+        currency: currency,
+        initialBalanceCents: 0,
+        icon: Icons.account_balance_outlined,
+      );
+      bankAcc = _accounts.where((a) => a.type == AccountType.asset).last;
+    }
+
+    AccountModel? openingEquity = _accounts
+        .where((a) => a.type == AccountType.income && a.name == 'Opening Balances')
+        .firstOrNull;
+    if ((startingCashCents > 0 || startingBankCents > 0) && openingEquity == null) {
+      await addAccount(
+        name: 'Opening Balances',
+        type: AccountType.income,
+        currency: currency,
+        initialBalanceCents: 0,
+        icon: Icons.flag_outlined,
+      );
+      openingEquity = _accounts
+          .where((a) => a.type == AccountType.income && a.name == 'Opening Balances')
+          .first;
+    }
+
+    if (startingCashCents > 0 && openingEquity != null) {
+      await recordTransaction(
+        description: 'Opening Cash Balance',
+        postings: [
+          PostingModel(accountId: cashAcc.id, amountCents: startingCashCents),
+          PostingModel(accountId: openingEquity.id, amountCents: -startingCashCents),
+        ],
+        note: 'Initial cash setup',
+      );
+    }
+
+    if (startingBankCents > 0 && openingEquity != null) {
+      await recordTransaction(
+        description: 'Opening Bank Balance',
+        postings: [
+          PostingModel(accountId: bankAcc.id, amountCents: startingBankCents),
+          PostingModel(accountId: openingEquity.id, amountCents: -startingBankCents),
+        ],
+        note: 'Initial bank setup',
+      );
+    }
+
+    final totalLiquid = totalAssetsCents;
+    final totalAssigned = _envelopes.fold<int>(0, (sum, e) => sum + e.assignedCents);
+    _availableToAssignCents = totalLiquid - totalAssigned;
+
+    if (createStarterEnvelopes && _envelopes.isEmpty) {
+      final baseline = totalLiquid > 0
+          ? totalLiquid
+          : (currency == 'IQD' ? 50000000 : 100000);
+      final needsTarget = (baseline * 0.50).round();
+      final wantsTarget = (baseline * 0.30).round();
+      final bufferTarget = (baseline * 0.20).round();
+
+      await addEnvelope(
+        name: 'Essentials & Groceries',
+        targetCents: needsTarget,
+        icon: Icons.shopping_basket_outlined,
+      );
+      await addEnvelope(
+        name: 'Bills & Transport',
+        targetCents: wantsTarget,
+        icon: Icons.directions_car_outlined,
+      );
+      await addEnvelope(
+        name: 'Personal & Dining',
+        targetCents: bufferTarget,
+        icon: Icons.local_cafe_outlined,
+      );
+
+      // Auto-allocate 80% of starting cash across starter envelopes if user funded vault
+      if (totalLiquid > 0 && _envelopes.length >= 3) {
+        final e0 = (totalLiquid * 0.45).round();
+        final e1 = (totalLiquid * 0.20).round();
+        final e2 = (totalLiquid * 0.15).round();
+        await assignToEnvelope(_envelopes[0].id, e0);
+        await assignToEnvelope(_envelopes[1].id, e1);
+        await assignToEnvelope(_envelopes[2].id, e2);
+      }
+    }
+
+    if (emergencyGoalTargetCents > 0 && _savingsGoals.isEmpty) {
+      final openingReserve = totalLiquid > 0 ? (totalLiquid * 0.10).round() : 0;
+      await addSavingsGoal(
+        name: 'Emergency Reserve',
+        targetAmountCents: emergencyGoalTargetCents,
+        targetDate: DateTime.now().add(const Duration(days: 180)),
+        isLocked: true,
+        icon: Icons.shield_outlined,
+        initialDepositCents: openingReserve,
+      );
+    }
 
     _snapshotCurrentVault();
     notifyListeners();

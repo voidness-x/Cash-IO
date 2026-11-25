@@ -120,25 +120,30 @@ class _RecurringBillsSheetState extends State<RecurringBillsSheet> {
                   child: Icon(Icons.repeat_rounded, color: tokens.accentGold, size: 24),
                 ),
                 SizedBox(width: tokens.space3),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'RECURRING BILLS & SUBSCRIPTIONS',
-                      style: GoogleFonts.spaceGrotesk(
-                        color: tokens.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'RECURRING BILLS',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          color: tokens.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Automated & scheduled double-entry postings',
-                      style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
-                    ),
-                  ],
+                      Text(
+                        'Scheduled subscriptions & payments',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
                 ),
-                const Spacer(),
                 IconButton(
                   icon: Icon(Icons.close, color: tokens.textSecondary, size: 20),
                   onPressed: () => Navigator.pop(context),
@@ -211,12 +216,16 @@ class _RecurringBillsSheetState extends State<RecurringBillsSheet> {
                             children: [
                               Row(
                                 children: [
-                                  Text(
-                                    item.title,
-                                    style: GoogleFonts.mukta(
-                                      color: tokens.textPrimary,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 14,
+                                  Flexible(
+                                    child: Text(
+                                      item.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.mukta(
+                                        color: tokens.textPrimary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
+                                      ),
                                     ),
                                   ),
                                   const SizedBox(width: 6),
@@ -403,10 +412,11 @@ class _RecurringBillsSheetState extends State<RecurringBillsSheet> {
                 const SizedBox(height: 4),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedSourceId,
+                  isExpanded: true,
                   dropdownColor: tokens.bgSurfaceElevated,
                   decoration: const InputDecoration(isDense: true),
                   items: assets.map((a) {
-                    return DropdownMenuItem(value: a.id, child: Text(a.name));
+                    return DropdownMenuItem(value: a.id, child: Text(a.name, maxLines: 1, overflow: TextOverflow.ellipsis));
                   }).toList(),
                   onChanged: (val) => setState(() => _selectedSourceId = val),
                 ),
@@ -419,10 +429,11 @@ class _RecurringBillsSheetState extends State<RecurringBillsSheet> {
                 const SizedBox(height: 4),
                 DropdownButtonFormField<String>(
                   initialValue: _selectedDestId,
+                  isExpanded: true,
                   dropdownColor: tokens.bgSurfaceElevated,
                   decoration: const InputDecoration(isDense: true),
                   items: expenses.map((e) {
-                    return DropdownMenuItem(value: e.id, child: Text(e.name));
+                    return DropdownMenuItem(value: e.id, child: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis));
                   }).toList(),
                   onChanged: (val) => setState(() => _selectedDestId = val),
                 ),

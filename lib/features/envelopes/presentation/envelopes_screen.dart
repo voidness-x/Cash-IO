@@ -126,17 +126,21 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                      'AVAILABLE TO ASSIGN',
-                                      style: GoogleFonts.spaceGrotesk(
-                                        color: tokens.textSecondary,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 1.2,
+                                    Expanded(
+                                      child: Text(
+                                        'AVAILABLE TO ASSIGN',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.spaceGrotesk(
+                                          color: tokens.textSecondary,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 1.0,
+                                        ),
                                       ),
                                     ),
+                                    const SizedBox(width: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                       decoration: BoxDecoration(
@@ -159,13 +163,17 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 2),
-                                Text(
-                                  CurrencyUtils.format(availableCents, currency: currency),
-                                  style: GoogleFonts.jetBrainsMono(
-                                    color: availableCents < 0 ? tokens.statusExpense : tokens.textPrimary,
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: -0.5,
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    CurrencyUtils.format(availableCents, currency: currency),
+                                    style: GoogleFonts.jetBrainsMono(
+                                      color: availableCents < 0 ? tokens.statusExpense : tokens.textPrimary,
+                                      fontSize: 25,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.5,
+                                    ),
                                   ),
                                 ),
                                 Text(
@@ -191,13 +199,12 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                       Divider(color: tokens.borderSubtle, height: 1),
                       SizedBox(height: tokens.space3),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildMiniStat('TOTAL ASSIGNED', CurrencyUtils.format(totalAssigned, currency: currency), tokens),
+                          Expanded(child: _buildMiniStat('ASSIGNED', CurrencyUtils.format(totalAssigned, currency: currency), tokens)),
                           Container(width: 1, height: 24, color: tokens.borderSubtle),
-                          _buildMiniStat('TOTAL SPENT', CurrencyUtils.format(totalSpent, currency: currency), tokens),
+                          Expanded(child: _buildMiniStat('SPENT', CurrencyUtils.format(totalSpent, currency: currency), tokens)),
                           Container(width: 1, height: 24, color: tokens.borderSubtle),
-                          _buildMiniStat('ACTIVE ENVELOPES', '${envelopes.length}', tokens),
+                          Expanded(child: _buildMiniStat('ENVELOPES', '${envelopes.length}', tokens)),
                         ],
                       ),
                     ],
@@ -216,12 +223,17 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                         child: OutlinedButton.icon(
                           onPressed: () => _showAddEnvelopeSheet(context, currency),
                           icon: const Icon(Icons.add, size: 16),
-                          label: Text('New Envelope', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w700, fontSize: 12)),
+                          label: Text(
+                            'New Envelope',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w700, fontSize: 12),
+                          ),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: tokens.statusIncome,
                             side: BorderSide(color: tokens.statusIncome.withValues(alpha: 0.5)),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(tokens.radiusSm)),
-                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                           ),
                         ),
                       ),
@@ -231,13 +243,18 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                           child: OutlinedButton.icon(
                             onPressed: () => _showQuickMoveSheet(context, envelopes, currency),
                             icon: const Icon(Icons.sync_alt_rounded, size: 16),
-                            label: Text('Move Budget', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w700, fontSize: 12)),
+                            label: Text(
+                              'Move Budget',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w700, fontSize: 12),
+                            ),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: tokens.textPrimary,
                               backgroundColor: tokens.bgSurface,
                               side: BorderSide(color: tokens.borderHairline),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(tokens.radiusSm)),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                             ),
                           ),
                         ),
@@ -337,27 +354,35 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
   }
 
   Widget _buildMiniStat(String label, String value, CashIOThemeExtension tokens) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.spaceGrotesk(
-            color: tokens.textTertiary,
-            fontSize: 9,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.8,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        children: [
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.spaceGrotesk(
+              color: tokens.textTertiary,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+            ),
           ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          value,
-          style: GoogleFonts.jetBrainsMono(
-            color: tokens.textPrimary,
-            fontSize: 12,
-            fontWeight: FontWeight.w700,
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: GoogleFonts.jetBrainsMono(
+                color: tokens.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -427,27 +452,34 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                   ],
                 ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    CurrencyUtils.format(remaining, currency: currency),
-                    style: GoogleFonts.jetBrainsMono(
-                      color: isOverspent ? tokens.statusExpense : tokens.statusIncome,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 120),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        CurrencyUtils.format(remaining, currency: currency),
+                        style: GoogleFonts.jetBrainsMono(
+                          color: isOverspent ? tokens.statusExpense : tokens.statusIncome,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
-                  ),
-                  Text(
-                    isOverspent ? 'OVER BUDGET' : 'LEFT TO SPEND',
-                    style: GoogleFonts.spaceGrotesk(
-                      color: isOverspent ? tokens.statusExpense : tokens.textTertiary,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
+                    Text(
+                      isOverspent ? 'OVER BUDGET' : 'LEFT TO SPEND',
+                      style: GoogleFonts.spaceGrotesk(
+                        color: isOverspent ? tokens.statusExpense : tokens.textTertiary,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.4,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -471,13 +503,18 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
 
           // Footer Breakdown & Action Buttons
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Spent: ${CurrencyUtils.format(spent, currency: currency)}  •  Assigned: ${CurrencyUtils.format(assigned, currency: currency)}',
-                style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
+              Expanded(
+                child: Text(
+                  'Spent: ${CurrencyUtils.format(spent, currency: currency)} • Assigned: ${CurrencyUtils.format(assigned, currency: currency)}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
+                ),
               ),
+              const SizedBox(width: 8),
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   if (envelopes.length >= 2 && remaining > 0) ...[
                     InkWell(
@@ -611,12 +648,17 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                     const SizedBox(height: 4),
                     DropdownButtonFormField<EnvelopeModel>(
                       initialValue: currentFrom,
+                      isExpanded: true,
                       dropdownColor: tokens.bgSurfaceElevated,
                       decoration: const InputDecoration(isDense: true),
                       items: envelopes.map((e) {
                         return DropdownMenuItem(
                           value: e,
-                          child: Text('${e.name} (${CurrencyUtils.format(e.remainingCents, currency: baseCurrency)} left)'),
+                          child: Text(
+                            '${e.name} (${CurrencyUtils.format(e.remainingCents, currency: baseCurrency)} left)',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         );
                       }).toList(),
                       onChanged: (val) {
@@ -632,12 +674,17 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                     const SizedBox(height: 4),
                     DropdownButtonFormField<EnvelopeModel>(
                       initialValue: currentTo,
+                      isExpanded: true,
                       dropdownColor: tokens.bgSurfaceElevated,
                       decoration: const InputDecoration(isDense: true),
                       items: envelopes.where((e) => e.id != currentFrom.id).map((e) {
                         return DropdownMenuItem(
                           value: e,
-                          child: Text('${e.name} (${CurrencyUtils.format(e.remainingCents, currency: baseCurrency)} left)'),
+                          child: Text(
+                            '${e.name} (${CurrencyUtils.format(e.remainingCents, currency: baseCurrency)} left)',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         );
                       }).toList(),
                       onChanged: (val) {

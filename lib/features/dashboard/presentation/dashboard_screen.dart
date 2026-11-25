@@ -16,6 +16,7 @@ import '../../fx/presentation/fx_converter_sheet.dart';
 import '../../advisory/presentation/financial_advisory_card.dart';
 import '../../savings/presentation/savings_goals_deck.dart';
 import '../../savings/presentation/savings_goal_sheets.dart';
+import '../../profile_setup/presentation/quick_financial_setup_sheet.dart';
 import '../../../core/services/ledger_search_service.dart';
 import '../../../core/services/update_receiver_service.dart';
 import '../../transactions/presentation/ledger_search_filter_bar.dart';
@@ -36,11 +37,15 @@ class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final AnimationController _entranceController;
   late final Animation<double> _fadeAnimation;
-  late final Animation<Offset> _slideAnimation;
 
   LedgerFilterCriteria _ledgerCriteria = const LedgerFilterCriteria();
   bool _isSearchExpanded = false;
   bool _promptedUpdateDialogThisSession = false;
+  bool _dismissedQuickSetupCard = false;
+
+  // Clean segmented focus tab to avoid stacking 5 heavy analytics widgets at once:
+  // 0: Insights & 30d Flow, 1: Savings Vaults, 2: Spending Breakdown
+  int _selectedFocusTab = 0;
 
   @override
   void initState() {
@@ -48,25 +53,14 @@ class _DashboardScreenState extends State<DashboardScreen>
     WidgetsBinding.instance.addObserver(this);
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 500),
     );
-
     _fadeAnimation = CurvedAnimation(
       parent: _entranceController,
       curve: Curves.easeOutCubic,
     );
-
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.05),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _entranceController,
-      curve: Curves.easeOutCubic,
-    ));
-
     _entranceController.forward();
 
-    // Automatically check GitHub Releases for new APK / OTA updates on app launch
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkAndPromptGitHubRelease();
     });
@@ -95,6 +89,15 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
+  void _openQuickFinancialSetup(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => const QuickFinancialSetupSheet(),
+    );
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -111,71 +114,60 @@ class _DashboardScreenState extends State<DashboardScreen>
     return ListenableBuilder(
       listenable: Listenable.merge([repo, otaService]),
       builder: (context, _) {
-        final accounts = repo.accounts;
         final transactions = repo.transactions;
         final currency = repo.baseCurrency;
         final netWorth = repo.netWorthCents;
         final income30d = repo.last30DaysIncomeCents;
         final expense30d = repo.last30DaysExpenseCents;
+        final showQuickSetupPrompt =
+            !_dismissedQuickSetupCard && transactions.isEmpty && repo.totalAssetsCents == 0;
 
         return FrostedScaffold(
           appBar: AppBar(
+            titleSpacing: tokens.space4,
             title: Row(
               children: [
                 const CashIOLogo(
-                  fontSize: 20,
+                  fontSize: 18,
                   animateO: true,
                   showSubtitle: false,
                 ),
-                SizedBox(width: tokens.space3),
-                Container(
-                  width: 1,
-                  height: 18,
-                  color: tokens.borderHairline,
-                ),
-                SizedBox(width: tokens.space3),
-                InkWell(
-                  borderRadius: BorderRadius.circular(8),
-                  onTap: () {
-                    HapticFeedback.lightImpact();
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (ctx) => const VaultSwitcherSheet(),
-                    );
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              repo.profileName.toUpperCase(),
+                const SizedBox(width: 10),
+                Container(width: 1, height: 16, color: tokens.borderHairline),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (ctx) => const VaultSwitcherSheet(),
+                      );
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              repo.profileName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.spaceGrotesk(
                                 color: tokens.textPrimary,
-                                fontSize: 12,
+                                fontSize: 13,
                                 fontWeight: FontWeight.w700,
-                                letterSpacing: 0.8,
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            Icon(Icons.arrow_drop_down, color: tokens.textSecondary, size: 16),
-                          ],
-                        ),
-                        Text(
-                          'AIR-GAPPED VAULT',
-                          style: GoogleFonts.mukta(
-                            color: tokens.accentGold,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.8,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 2),
+                          Icon(Icons.keyboard_arrow_down_rounded, color: tokens.textSecondary, size: 18),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -183,33 +175,13 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.sync_outlined),
-                tooltip: 'E2EE Google Drive Sync',
-                onPressed: () async {
-                  HapticFeedback.lightImpact();
-                  await repo.triggerGoogleDriveSync();
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'E2EE Sync: Changes securely committed to Google Drive.',
-                          style: GoogleFonts.mukta(fontWeight: FontWeight.w600),
-                        ),
-                        backgroundColor: tokens.statusIncome,
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 2),
-                      ),
-                    );
-                  }
-                },
-              ),
-              IconButton(
                 icon: Stack(
                   clipBehavior: Clip.none,
                   children: [
                     Icon(
                       Icons.system_update_alt_rounded,
-                      color: otaService.availableUpdate != null ? tokens.accent : null,
+                      size: 21,
+                      color: otaService.availableUpdate != null ? tokens.accent : tokens.textSecondary,
                     ),
                     if (otaService.availableUpdate != null)
                       Positioned(
@@ -226,15 +198,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                       ),
                   ],
                 ),
-                tooltip: 'OTA Updates & Rollback',
+                tooltip: 'Updates & Rollback',
                 onPressed: () {
                   HapticFeedback.lightImpact();
                   _openOtaUpdateSheet(context);
                 },
               ),
               IconButton(
-                icon: const Icon(Icons.person_outline),
-                tooltip: 'Profiles & Vaults',
+                icon: const Icon(Icons.layers_outlined, size: 21),
+                tooltip: 'Switch Vault',
                 onPressed: () {
                   HapticFeedback.lightImpact();
                   showModalBottomSheet(
@@ -249,158 +221,187 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
           body: FadeTransition(
             opacity: _fadeAnimation,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: ListView(
-                padding: EdgeInsets.all(tokens.space4),
-                children: [
-                  // 0. LIVE GITHUB RELEASE UPDATE BANNER (Auto-triggered when new release ships)
-                  if (otaService.hasUnreadUpdateBanner && otaService.availableUpdate != null) ...[
-                    Container(
-                      padding: EdgeInsets.all(tokens.space4),
-                      decoration: BoxDecoration(
-                        color: tokens.accent.withValues(alpha: 0.10),
-                        borderRadius: BorderRadius.circular(tokens.radiusMd),
-                        border: Border.all(color: tokens.accent.withValues(alpha: 0.5)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.system_update_rounded, color: tokens.accent, size: 22),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'UPDATE AVAILABLE • v${otaService.availableUpdate!.version}',
-                                  style: GoogleFonts.spaceGrotesk(
-                                    color: tokens.accent,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.8,
-                                  ),
-                                ),
-                                Text(
-                                  otaService.availableUpdate!.title,
-                                  style: GoogleFonts.mukta(
-                                    color: tokens.textPrimary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: tokens.accent,
-                              foregroundColor: Colors.black,
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            onPressed: () => _openOtaUpdateSheet(context),
-                            child: Text(
-                              'Update',
-                              style: GoogleFonts.spaceGrotesk(fontSize: 12, fontWeight: FontWeight.w800),
-                            ),
-                          ),
-                          IconButton(
-                            icon: Icon(Icons.close, size: 16, color: tokens.textTertiary),
-                            visualDensity: VisualDensity.compact,
-                            onPressed: otaService.dismissUpdateBanner,
-                          ),
-                        ],
-                      ),
+            child: ListView(
+              padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space2, tokens.space4, 96),
+              children: [
+                // 0A. LIVE GITHUB RELEASE UPDATE BANNER
+                if (otaService.hasUnreadUpdateBanner && otaService.availableUpdate != null) ...[
+                  Container(
+                    padding: EdgeInsets.all(tokens.space3),
+                    decoration: BoxDecoration(
+                      color: tokens.accent.withValues(alpha: 0.10),
+                      borderRadius: BorderRadius.circular(tokens.radiusMd),
+                      border: Border.all(color: tokens.accent.withValues(alpha: 0.45)),
                     ),
-                    SizedBox(height: tokens.space4),
-                  ],
+                    child: Row(
+                      children: [
+                        Icon(Icons.system_update_rounded, color: tokens.accent, size: 20),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'NEW UPDATE • v${otaService.availableUpdate!.version}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.spaceGrotesk(
+                                  color: tokens.accent,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              Text(
+                                otaService.availableUpdate!.title,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.mukta(
+                                  color: tokens.textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: tokens.accent,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          onPressed: () => _openOtaUpdateSheet(context),
+                          child: Text(
+                            'Update',
+                            style: GoogleFonts.spaceGrotesk(fontSize: 11, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(Icons.close, size: 16, color: tokens.textTertiary),
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Dismiss update banner',
+                          onPressed: otaService.dismissUpdateBanner,
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: tokens.space3),
+                ],
 
-                  // 1. HERO CURRENT CASH TERMINAL DECK
-                  StaggeredEntrance(
-                    index: 0,
-                    child: _buildCurrentCashDeck(
-                      tokens: tokens,
-                      currentCashCents: repo.totalAssetsCents,
-                      netWorthCents: netWorth,
-                      currency: currency,
-                      totalLiabilitiesCents: repo.totalLiabilitiesCents,
-                      onAddCash: () => _openAddCashSheet(context, currency),
-                      onSpendCash: () => _openSpendCashSheet(context, currency),
+                // 0B. GUIDED STARTING CASH CARD (For fresh or newly updated 0-balance vaults)
+                if (showQuickSetupPrompt) ...[
+                  Container(
+                    padding: EdgeInsets.all(tokens.space4),
+                    decoration: BoxDecoration(
+                      color: tokens.bgSurface,
+                      borderRadius: BorderRadius.circular(tokens.radiusMd),
+                      border: Border.all(color: tokens.accent.withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.flag_outlined, color: tokens.accent, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Quick Start: Add Your Starting Cash',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.spaceGrotesk(
+                                  color: tokens.textPrimary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(Icons.close, size: 16, color: tokens.textTertiary),
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Dismiss quick start',
+                              onPressed: () => setState(() => _dismissedQuickSetupCard = true),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          'Set your current wallet cash, bank balance, and starter envelopes in one step.',
+                          style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                        ),
+                        SizedBox(height: tokens.space3),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: () => _openQuickFinancialSetup(context),
+                            icon: const Icon(Icons.account_balance_wallet_outlined, size: 18),
+                            label: const Text('Set Starting Cash & Budgets'),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   SizedBox(height: tokens.space4),
-
-                  // 2. RAPID ACTION STRIP
-                  StaggeredEntrance(
-                    index: 1,
-                    child: _buildQuickActionStrip(context, tokens, currency),
-                  ),
-                  SizedBox(height: tokens.space5),
-
-                  // 3. ON-DEVICE FINANCIAL ADVISORY & INTELLIGENCE CARD (Phase 6A)
-                  StaggeredEntrance(
-                    index: 2,
-                    child: FinancialAdvisoryCard(
-                      onOpenSavingsGoals: () => _openCreateGoalSheet(context, currency),
-                    ),
-                  ),
-                  SizedBox(height: tokens.space5),
-
-                  // 4. CASH FLOW VELOCITY & HEALTH GAUGE
-                  StaggeredEntrance(
-                    index: 3,
-                    child: _buildCashFlowHealthBar(
-                      tokens: tokens,
-                      incomeCents: income30d,
-                      expenseCents: expense30d,
-                      currency: currency,
-                    ),
-                  ),
-                  SizedBox(height: tokens.space5),
-
-                  // 5. CATEGORY SPENDING DONUT ANALYTICS
-                  StaggeredEntrance(
-                    index: 4,
-                    child: CategorySpendingDonutCard(currency: currency),
-                  ),
-                  SizedBox(height: tokens.space5),
-
-                  // 6. SAVINGS GOALS & LOCKED VAULTS DECK (Phase 6A)
-                  StaggeredEntrance(
-                    index: 5,
-                    child: SavingsGoalsDeck(currency: currency),
-                  ),
-                  SizedBox(height: tokens.space5),
-
-                  // 7. CHART OF ACCOUNTS MINI STRIP
-                  StaggeredEntrance(
-                    index: 6,
-                    child: _buildAccountsStrip(context, tokens, accounts, currency),
-                  ),
-                  SizedBox(height: tokens.space5),
-
-                  // 8. RECENT DOUBLE-ENTRY ACTIVITY FEED
-                  _buildRecentActivitySection(context, tokens, transactions, currency, repo.profileId),
-                  SizedBox(height: tokens.space10),
                 ],
-              ),
+
+                // 1. HERO CURRENT CASH CARD (Clean, Breathable, Zero Overflow)
+                _buildCurrentCashDeck(
+                  tokens: tokens,
+                  currentCashCents: repo.totalAssetsCents,
+                  netWorthCents: netWorth,
+                  currency: currency,
+                  totalLiabilitiesCents: repo.totalLiabilitiesCents,
+                  onAddCash: () => _openAddCashSheet(context, currency),
+                  onSpendCash: () => _openSpendCashSheet(context, currency),
+                  onOpenRecurring: () => _openRecurringBillsSheet(context, currency),
+                  onOpenFx: () => _openFxConverterSheet(context, currency),
+                ),
+                SizedBox(height: tokens.space4),
+
+                // 2. FOCUS VIEW SWITCHER (Eliminates cluttered vertical wall of cards)
+                _buildFocusTabSelector(tokens),
+                SizedBox(height: tokens.space3),
+
+                if (_selectedFocusTab == 0) ...[
+                  _buildCashFlowHealthBar(
+                    tokens: tokens,
+                    incomeCents: income30d,
+                    expenseCents: expense30d,
+                    currency: currency,
+                  ),
+                  SizedBox(height: tokens.space3),
+                  FinancialAdvisoryCard(
+                    onOpenSavingsGoals: () => _openCreateGoalSheet(context, currency),
+                  ),
+                ] else if (_selectedFocusTab == 1) ...[
+                  SavingsGoalsDeck(currency: currency),
+                ] else ...[
+                  CategorySpendingDonutCard(currency: currency),
+                ],
+
+                SizedBox(height: tokens.space5),
+
+                // 3. RECENT ACTIVITY & SEARCH
+                _buildRecentActivitySection(context, tokens, transactions, currency, repo.profileId),
+              ],
             ),
           ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _openRecordTransactionSheet(context),
             backgroundColor: tokens.accentGold,
             foregroundColor: tokens.bgPrimary,
-            elevation: 4,
+            elevation: 3,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(tokens.radiusPill),
             ),
-            icon: const Icon(Icons.add_circle_outline, size: 20),
+            icon: const Icon(Icons.add_rounded, size: 20),
             label: Text(
-              'RECORD ENTRY',
+              'NEW ENTRY',
               style: GoogleFonts.spaceGrotesk(
                 fontWeight: FontWeight.w800,
                 fontSize: 12,
-                letterSpacing: 1.0,
+                letterSpacing: 0.8,
               ),
             ),
           ),
@@ -409,9 +410,69 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Current Cash Terminal Deck with Quick Actions & Spline Chart
-  // ---------------------------------------------------------------------------
+  Widget _buildFocusTabSelector(CashIOThemeExtension tokens) {
+    const tabs = [
+      (Icons.auto_awesome_outlined, 'Insights'),
+      (Icons.savings_outlined, 'Savings Vaults'),
+      (Icons.pie_chart_outline_rounded, 'Categories'),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: tokens.bgSurface,
+        borderRadius: BorderRadius.circular(tokens.radiusMd),
+        border: Border.all(color: tokens.borderHairline),
+      ),
+      child: Row(
+        children: List.generate(tabs.length, (i) {
+          final isSelected = _selectedFocusTab == i;
+          return Expanded(
+            child: InkWell(
+              onTap: () {
+                HapticFeedback.selectionClick();
+                setState(() => _selectedFocusTab = i);
+              },
+              borderRadius: BorderRadius.circular(tokens.radiusSm),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
+                decoration: BoxDecoration(
+                  color: isSelected ? tokens.accent.withValues(alpha: 0.16) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(tokens.radiusSm),
+                  border: isSelected ? Border.all(color: tokens.accent.withValues(alpha: 0.45)) : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      tabs[i].$1,
+                      size: 15,
+                      color: isSelected ? tokens.accent : tokens.textSecondary,
+                    ),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Text(
+                        tabs[i].$2,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          color: isSelected ? tokens.textPrimary : tokens.textSecondary,
+                          fontSize: 11,
+                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
   Widget _buildCurrentCashDeck({
     required CashIOThemeExtension tokens,
     required int currentCashCents,
@@ -420,172 +481,156 @@ class _DashboardScreenState extends State<DashboardScreen>
     required int totalLiabilitiesCents,
     required VoidCallback onAddCash,
     required VoidCallback onSpendCash,
+    required VoidCallback onOpenRecurring,
+    required VoidCallback onOpenFx,
   }) {
     final isNegative = currentCashCents < 0;
+    final repo = VaultRepository.instance;
 
     return Container(
       decoration: BoxDecoration(
         color: tokens.bgSurface,
         borderRadius: BorderRadius.circular(tokens.radiusMd),
         border: Border.all(color: tokens.borderHairline, width: 1.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.25),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: EdgeInsets.all(tokens.space5),
+            padding: EdgeInsets.all(tokens.space4),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.account_balance_wallet_outlined,
-                          size: 14,
-                          color: tokens.accentGold,
-                        ),
-                        SizedBox(width: tokens.space2),
-                        Text(
-                          'CURRENT CASH',
-                          style: GoogleFonts.spaceGrotesk(
-                            color: tokens.textSecondary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.2,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: tokens.space2, vertical: 3),
-                      decoration: BoxDecoration(
-                        color: tokens.statusIncomeBg,
-                        borderRadius: BorderRadius.circular(tokens.radiusXs),
-                        border: Border.all(color: tokens.statusIncome.withValues(alpha: 0.3)),
-                      ),
+                    Icon(Icons.account_balance_wallet_outlined, size: 15, color: tokens.accentGold),
+                    const SizedBox(width: 6),
+                    Expanded(
                       child: Text(
-                        'AVAILABLE NOW',
-                        style: GoogleFonts.mukta(
-                          color: tokens.statusIncome,
-                          fontSize: 9,
+                        'TOTAL AVAILABLE CASH',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          color: tokens.textSecondary,
+                          fontSize: 11,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: onOpenFx,
+                      borderRadius: BorderRadius.circular(tokens.radiusPill),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: tokens.bgSurfaceElevated,
+                          borderRadius: BorderRadius.circular(tokens.radiusPill),
+                          border: Border.all(color: tokens.borderHairline),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.currency_exchange, size: 12, color: tokens.statusIncome),
+                            const SizedBox(width: 4),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 130),
+                              child: Text(
+                                '≈ ${CurrencyUtils.format(repo.convertCents(currentCashCents, currency, repo.secondaryCurrency), currency: repo.secondaryCurrency)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.jetBrainsMono(
+                                  color: tokens.textPrimary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ],
                 ),
-                SizedBox(height: tokens.space2),
-                Text(
-                  CurrencyUtils.format(currentCashCents, currency: currency),
-                  style: GoogleFonts.jetBrainsMono(
-                    color: isNegative ? tokens.statusExpense : tokens.textPrimary,
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.8,
+                const SizedBox(height: 8),
+
+                // Scale-safe Main Balance Display
+                SizedBox(
+                  width: double.infinity,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      CurrencyUtils.format(currentCashCents, currency: currency),
+                      style: GoogleFonts.jetBrainsMono(
+                        color: isNegative ? tokens.statusExpense : tokens.textPrimary,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
                   ),
                 ),
-                SizedBox(height: tokens.space1),
+                const SizedBox(height: 4),
                 Text(
-                  'Net Worth: ${CurrencyUtils.format(netWorthCents, currency: currency)}  •  Liabilities: ${CurrencyUtils.format(totalLiabilitiesCents, currency: currency)}',
+                  'Net Worth: ${CurrencyUtils.format(netWorthCents, currency: currency)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.mukta(
                     color: tokens.textTertiary,
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w600,
-                  ),
-                ),
-                SizedBox(height: tokens.space2),
-                InkWell(
-                  onTap: () => _openFxConverterSheet(context, currency),
-                  borderRadius: BorderRadius.circular(tokens.radiusXs),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: tokens.statusIncome.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(tokens.radiusXs),
-                      border: Border.all(color: tokens.statusIncome.withValues(alpha: 0.25)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.currency_exchange, size: 12, color: tokens.statusIncome),
-                        const SizedBox(width: 4),
-                        Text(
-                          '≈ ${CurrencyUtils.format(VaultRepository.instance.convertCents(currentCashCents, currency, VaultRepository.instance.secondaryCurrency), currency: VaultRepository.instance.secondaryCurrency)}',
-                          style: GoogleFonts.jetBrainsMono(
-                            color: tokens.statusIncome,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '(${VaultRepository.instance.secondaryCurrency} FX)',
-                          style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 10, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
                   ),
                 ),
                 SizedBox(height: tokens.space4),
 
-                // User-friendly Add Cash & Spend Cash Action Buttons
+                // Primary Actions (Add Cash & Spend Cash) + Compact Recurring Shortcut
                 Row(
                   children: [
                     Expanded(
-                      child: ElevatedButton.icon(
+                      child: FilledButton.icon(
                         onPressed: onAddCash,
                         icon: const Icon(Icons.add_rounded, size: 18),
-                        label: Text(
+                        label: const Text(
                           'Add Cash',
-                          style: GoogleFonts.spaceGrotesk(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                            letterSpacing: 0.5,
-                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        style: ElevatedButton.styleFrom(
+                        style: FilledButton.styleFrom(
                           backgroundColor: tokens.statusIncome,
                           foregroundColor: tokens.bgPrimary,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(tokens.radiusSm),
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
                         ),
                       ),
                     ),
-                    SizedBox(width: tokens.space3),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: onSpendCash,
                         icon: const Icon(Icons.remove_rounded, size: 18),
-                        label: Text(
-                          'Spend Cash',
-                          style: GoogleFonts.spaceGrotesk(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 13,
-                            letterSpacing: 0.5,
-                          ),
+                        label: const Text(
+                          'Spend',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         style: OutlinedButton.styleFrom(
                           backgroundColor: tokens.bgSurfaceElevated,
                           foregroundColor: tokens.textPrimary,
                           side: BorderSide(color: tokens.borderHairline),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(tokens.radiusSm),
-                          ),
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton.outlined(
+                      onPressed: onOpenRecurring,
+                      tooltip: 'Recurring Bills & Subscriptions',
+                      icon: Icon(Icons.repeat_rounded, size: 19, color: tokens.accentGold),
+                      style: IconButton.styleFrom(
+                        side: BorderSide(color: tokens.borderHairline),
+                        backgroundColor: tokens.bgSurfaceElevated,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(tokens.radiusSm),
                         ),
                       ),
                     ),
@@ -595,21 +640,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
 
-          // Canvas Sparkline Chart
-          SizedBox(
-            height: 48,
-            width: double.infinity,
-            child: CustomPaint(
-              painter: _SparklineSplinePainter(
-                strokeColor: tokens.accentGold,
-                fillGradientColor: tokens.accentGold.withValues(alpha: 0.12),
-              ),
-            ),
-          ),
-
-          // Assets & Liabilities Split Bar
+          // Assets & Liabilities Split Footer (100% Overflow-Safe)
           Container(
-            padding: EdgeInsets.symmetric(horizontal: tokens.space5, vertical: tokens.space3),
+            padding: EdgeInsets.symmetric(horizontal: tokens.space4, vertical: tokens.space3),
             decoration: BoxDecoration(
               color: tokens.bgSurfaceElevated,
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(tokens.radiusMd)),
@@ -618,53 +651,59 @@ class _DashboardScreenState extends State<DashboardScreen>
             child: Row(
               children: [
                 Expanded(
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: tokens.statusIncome,
-                          shape: BoxShape.circle,
+                      Text(
+                        'ASSETS',
+                        style: GoogleFonts.spaceGrotesk(
+                          color: tokens.textTertiary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      SizedBox(width: tokens.space2),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('ASSETS', style: GoogleFonts.spaceGrotesk(color: tokens.textTertiary, fontSize: 10, fontWeight: FontWeight.w700)),
-                          Text(
-                            CurrencyUtils.format(currentCashCents, currency: currency),
-                            style: GoogleFonts.jetBrainsMono(color: tokens.statusIncome, fontSize: 13, fontWeight: FontWeight.w700),
+                      const SizedBox(height: 2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          CurrencyUtils.format(currentCashCents, currency: currency),
+                          style: GoogleFonts.jetBrainsMono(
+                            color: tokens.statusIncome,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
                           ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
                 ),
                 Container(width: 1, height: 28, color: tokens.borderSubtle),
-                SizedBox(width: tokens.space4),
+                SizedBox(width: tokens.space3),
                 Expanded(
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: tokens.statusExpense,
-                          shape: BoxShape.circle,
+                      Text(
+                        'LIABILITIES',
+                        style: GoogleFonts.spaceGrotesk(
+                          color: tokens.textTertiary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      SizedBox(width: tokens.space2),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('LIABILITIES', style: GoogleFonts.spaceGrotesk(color: tokens.textTertiary, fontSize: 10, fontWeight: FontWeight.w700)),
-                          Text(
-                            CurrencyUtils.format(totalLiabilitiesCents, currency: currency),
-                            style: GoogleFonts.jetBrainsMono(color: tokens.statusExpense, fontSize: 13, fontWeight: FontWeight.w700),
+                      const SizedBox(height: 2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          CurrencyUtils.format(totalLiabilitiesCents, currency: currency),
+                          style: GoogleFonts.jetBrainsMono(
+                            color: tokens.statusExpense,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
                           ),
-                        ],
+                        ),
                       ),
                     ],
                   ),
@@ -677,88 +716,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Rapid Action Strip
-  // ---------------------------------------------------------------------------
-  Widget _buildQuickActionStrip(BuildContext context, CashIOThemeExtension tokens, String currency) {
-    return Row(
-      children: [
-        _buildActionTile(
-          icon: Icons.add_circle_outline,
-          label: '+ Add',
-          tokens: tokens,
-          onTap: () => _openAddCashSheet(context, currency),
-        ),
-        SizedBox(width: tokens.space2),
-        _buildActionTile(
-          icon: Icons.remove_circle_outline,
-          label: '- Spend',
-          tokens: tokens,
-          onTap: () => _openSpendCashSheet(context, currency),
-        ),
-        SizedBox(width: tokens.space2),
-        _buildActionTile(
-          icon: Icons.repeat_rounded,
-          label: 'Recurring',
-          tokens: tokens,
-          onTap: () => _openRecurringBillsSheet(context, currency),
-        ),
-        SizedBox(width: tokens.space2),
-        _buildActionTile(
-          icon: Icons.currency_exchange,
-          label: 'FX Matrix',
-          tokens: tokens,
-          onTap: () => _openFxConverterSheet(context, currency),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionTile({
-    required IconData icon,
-    required String label,
-    required CashIOThemeExtension tokens,
-    required VoidCallback onTap,
-  }) {
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            onTap();
-          },
-          borderRadius: BorderRadius.circular(tokens.radiusMd),
-          child: Container(
-            padding: EdgeInsets.symmetric(vertical: tokens.space3),
-            decoration: BoxDecoration(
-              color: tokens.bgSurface,
-              borderRadius: BorderRadius.circular(tokens.radiusMd),
-              border: Border.all(color: tokens.borderHairline),
-            ),
-            child: Column(
-              children: [
-                Icon(icon, color: tokens.accentGold, size: 20),
-                SizedBox(height: tokens.space1),
-                Text(
-                  label,
-                  style: GoogleFonts.mukta(
-                    color: tokens.textPrimary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Cash Flow Velocity & Health Bar
-  // ---------------------------------------------------------------------------
   Widget _buildCashFlowHealthBar({
     required CashIOThemeExtension tokens,
     required int incomeCents,
@@ -779,30 +736,31 @@ class _DashboardScreenState extends State<DashboardScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '30-DAY CASHFLOW VELOCITY',
-                style: GoogleFonts.spaceGrotesk(
-                  color: tokens.textSecondary,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.0,
+              Expanded(
+                child: Text(
+                  '30-DAY CASHFLOW',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ),
               Text(
-                incomeCents >= expenseCents ? 'SURPLUS' : 'DEFICIT',
+                incomeCents >= expenseCents ? 'NET SURPLUS' : 'NET DEFICIT',
                 style: GoogleFonts.mukta(
                   color: incomeCents >= expenseCents ? tokens.statusIncome : tokens.statusExpense,
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: FontWeight.w800,
                 ),
               ),
             ],
           ),
-          SizedBox(height: tokens.space3),
-
-          // Two-Tone Segmented Health Bar
+          const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(tokens.radiusPill),
             child: SizedBox(
@@ -821,25 +779,36 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ),
           ),
-          SizedBox(height: tokens.space3),
-
+          const SizedBox(height: 10),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '+${CurrencyUtils.format(incomeCents, currency: currency)}',
-                style: GoogleFonts.jetBrainsMono(
-                  color: tokens.statusIncome,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'In: +${CurrencyUtils.format(incomeCents, currency: currency)}',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: tokens.statusIncome,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
-              Text(
-                '-${CurrencyUtils.format(expenseCents, currency: currency)}',
-                style: GoogleFonts.jetBrainsMono(
-                  color: tokens.statusExpense,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+              const SizedBox(width: 8),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    'Out: -${CurrencyUtils.format(expenseCents, currency: currency)}',
+                    style: GoogleFonts.jetBrainsMono(
+                      color: tokens.statusExpense,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -849,84 +818,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Chart of Accounts Mini Strip
-  // ---------------------------------------------------------------------------
-  Widget _buildAccountsStrip(
-    BuildContext context,
-    CashIOThemeExtension tokens,
-    List<AccountModel> accounts,
-    String currency,
-  ) {
-    if (accounts.isEmpty) return const SizedBox.shrink();
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'ACCOUNTS OVERVIEW',
-          style: GoogleFonts.spaceGrotesk(
-            color: tokens.textSecondary,
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.0,
-          ),
-        ),
-        SizedBox(height: tokens.space2),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: accounts.map((acc) {
-              final isAsset = acc.type == AccountType.asset;
-              return Container(
-                margin: EdgeInsets.only(right: tokens.space2),
-                padding: EdgeInsets.symmetric(
-                  horizontal: tokens.space3,
-                  vertical: tokens.space2,
-                ),
-                decoration: BoxDecoration(
-                  color: tokens.bgSurface,
-                  borderRadius: BorderRadius.circular(tokens.radiusMd),
-                  border: Border.all(color: tokens.borderHairline),
-                ),
-                child: Row(
-                  children: [
-                    Icon(acc.icon, size: 16, color: isAsset ? tokens.accentChampagne : tokens.textSecondary),
-                    SizedBox(width: tokens.space2),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          acc.name,
-                          style: GoogleFonts.mukta(
-                            color: tokens.textPrimary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        Text(
-                          CurrencyUtils.format(acc.balanceCents, currency: acc.currency),
-                          style: GoogleFonts.jetBrainsMono(
-                            color: isAsset ? tokens.statusIncome : tokens.textPrimary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Recent Activity Section
-  // ---------------------------------------------------------------------------
   Widget _buildRecentActivitySection(
     BuildContext context,
     CashIOThemeExtension tokens,
@@ -941,203 +832,187 @@ class _DashboardScreenState extends State<DashboardScreen>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        StaggeredEntrance(
-          index: 4,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    'RECENT ACTIVITY',
-                    style: GoogleFonts.spaceGrotesk(
-                      color: tokens.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.0,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${transactions.length} records',
-                    style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
-                  ),
-                ],
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'RECENT ACTIVITY (${transactions.length})',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.spaceGrotesk(
+                  color: tokens.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                ),
               ),
-              Row(
-                children: [
-                  // Receipt Vault Gallery Button
-                  TextButton.icon(
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (ctx) => const ReceiptVaultGallery()),
-                      );
-                    },
-                    icon: Icon(Icons.shield_outlined, size: 14, color: tokens.accent),
-                    label: Text(
-                      'Receipts ($receiptsCount)',
-                      style: GoogleFonts.mukta(color: tokens.accent, fontSize: 11, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  // Search Scrubber Toggle Button
-                  IconButton(
-                    icon: Icon(
-                      _isSearchExpanded || _ledgerCriteria.hasActiveFilters ? Icons.filter_alt : Icons.search,
-                      size: 18,
-                      color: _isSearchExpanded || _ledgerCriteria.hasActiveFilters ? tokens.accent : tokens.textSecondary,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    tooltip: 'Search & Date Scrubber',
-                    onPressed: () {
-                      setState(() {
-                        _isSearchExpanded = !_isSearchExpanded;
-                      });
-                    },
-                  ),
-                ],
+            ),
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                visualDensity: VisualDensity.compact,
               ),
-            ],
-          ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (ctx) => const ReceiptVaultGallery()),
+                );
+              },
+              icon: Icon(Icons.receipt_long_outlined, size: 15, color: tokens.accent),
+              label: Text(
+                'Receipts ($receiptsCount)',
+                style: GoogleFonts.mukta(color: tokens.accent, fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
+            IconButton(
+              icon: Icon(
+                _isSearchExpanded || _ledgerCriteria.hasActiveFilters ? Icons.filter_alt : Icons.search,
+                size: 19,
+                color: _isSearchExpanded || _ledgerCriteria.hasActiveFilters
+                    ? tokens.accent
+                    : tokens.textSecondary,
+              ),
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Search & Filter Transactions',
+              onPressed: () => setState(() => _isSearchExpanded = !_isSearchExpanded),
+            ),
+          ],
         ),
-        SizedBox(height: tokens.space2),
+        const SizedBox(height: 6),
 
-        // Search & Date Scrubber Bar
         if (_isSearchExpanded || _ledgerCriteria.hasActiveFilters) ...[
           LedgerSearchFilterBar(
             criteria: _ledgerCriteria,
-            onCriteriaChanged: (newCriteria) {
-              setState(() => _ledgerCriteria = newCriteria);
-            },
+            onCriteriaChanged: (newCriteria) => setState(() => _ledgerCriteria = newCriteria),
             totalCount: transactions.length,
             filteredCount: filtered.length,
           ),
           SizedBox(height: tokens.space3),
         ],
 
-        if (transactions.isEmpty) ...[
-          StaggeredEntrance(
-            index: 5,
-            child: Container(
-              padding: EdgeInsets.all(tokens.space6),
-              decoration: BoxDecoration(
-                color: tokens.bgSurface,
-                borderRadius: BorderRadius.circular(tokens.radiusMd),
-                border: Border.all(color: tokens.borderHairline),
-              ),
-              child: Center(
-                child: Text(
-                  'No transactions recorded. Tap "Record Entry" to post your first entry.',
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 13),
-                ),
+        if (transactions.isEmpty)
+          Container(
+            padding: EdgeInsets.all(tokens.space5),
+            decoration: BoxDecoration(
+              color: tokens.bgSurface,
+              borderRadius: BorderRadius.circular(tokens.radiusMd),
+              border: Border.all(color: tokens.borderHairline),
+            ),
+            child: Center(
+              child: Text(
+                'No transactions yet. Tap "Add Cash" or "New Entry" to log your first transaction.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 13),
               ),
             ),
-          ),
-        ] else if (filtered.isEmpty) ...[
-          StaggeredEntrance(
-            index: 5,
-            child: Container(
-              padding: EdgeInsets.all(tokens.space6),
+          )
+        else if (filtered.isEmpty)
+          Container(
+            padding: EdgeInsets.all(tokens.space5),
+            decoration: BoxDecoration(
+              color: tokens.bgSurface,
+              borderRadius: BorderRadius.circular(tokens.radiusMd),
+              border: Border.all(color: tokens.borderHairline),
+            ),
+            child: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.search_off_rounded, size: 32, color: tokens.textTertiary),
+                  const SizedBox(height: 6),
+                  Text(
+                    'No transactions match your search filters.',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.mukta(color: tokens.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
+                  ),
+                  TextButton(
+                    onPressed: () => setState(() => _ledgerCriteria = const LedgerFilterCriteria()),
+                    child: const Text('Reset Filters'),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ...filtered.take(20).map((tx) {
+            return Container(
+              margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
                 color: tokens.bgSurface,
                 borderRadius: BorderRadius.circular(tokens.radiusMd),
                 border: Border.all(color: tokens.borderHairline),
               ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                onTap: tx.receiptPaths.isNotEmpty
+                    ? () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => ReceiptViewerDialog(
+                            filename: tx.receiptPaths.first,
+                            profileId: profileId,
+                          ),
+                        );
+                      }
+                    : null,
+                leading: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: tokens.bgSurfaceElevated,
+                    borderRadius: BorderRadius.circular(tokens.radiusSm),
+                    border: Border.all(color: tokens.borderHairline),
+                  ),
+                  child: Icon(
+                    tx.receiptPaths.isNotEmpty ? Icons.receipt_long : Icons.swap_horiz_rounded,
+                    color: tokens.accentGold,
+                    size: 19,
+                  ),
+                ),
+                title: Text(
+                  tx.description,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.mukta(
+                    color: tokens.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 14,
+                  ),
+                ),
+                subtitle: Row(
                   children: [
-                    Icon(Icons.search_off_rounded, size: 36, color: tokens.textTertiary),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No transactions match your search filters.',
-                      style: GoogleFonts.mukta(color: tokens.textPrimary, fontSize: 13, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 4),
-                    GestureDetector(
-                      onTap: () => setState(() => _ledgerCriteria = const LedgerFilterCriteria()),
+                    Flexible(
                       child: Text(
-                        'Reset Filters',
-                        style: GoogleFonts.mukta(color: tokens.accent, fontSize: 12, fontWeight: FontWeight.bold),
+                        '${tx.timestamp.month}/${tx.timestamp.day}/${tx.timestamp.year}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
                       ),
                     ),
+                    if (tx.receiptPaths.isNotEmpty) ...[
+                      const SizedBox(width: 6),
+                      Icon(Icons.attach_file_rounded, size: 13, color: tokens.accent),
+                    ],
                   ],
                 ),
-              ),
-            ),
-          ),
-        ] else ...[
-          ...filtered.take(20).toList().asMap().entries.map((entry) {
-            final idx = entry.key;
-            final tx = entry.value;
-            return StaggeredEntrance(
-              index: 5 + idx,
-              child: Container(
-                margin: EdgeInsets.only(bottom: tokens.space2),
-                decoration: BoxDecoration(
-                  color: tokens.bgSurface,
-                  borderRadius: BorderRadius.circular(tokens.radiusMd),
-                  border: Border.all(color: tokens.borderHairline),
-                ),
-                child: ListTile(
-                  onTap: tx.receiptPaths.isNotEmpty
-                      ? () {
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => ReceiptViewerDialog(
-                              filename: tx.receiptPaths.first,
-                              profileId: profileId,
-                            ),
-                          );
-                        }
-                      : null,
-                  leading: Container(
-                    width: 38,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: tokens.bgSurfaceElevated,
-                      borderRadius: BorderRadius.circular(tokens.radiusSm),
-                      border: Border.all(color: tokens.borderHairline),
-                    ),
-                    child: Center(
-                      child: Icon(
-                        tx.receiptPaths.isNotEmpty ? Icons.receipt_long : Icons.swap_horiz,
-                        color: tokens.accentGold,
-                        size: 20,
+                trailing: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 135),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      CurrencyUtils.format(tx.totalCents, currency: currency),
+                      style: GoogleFonts.jetBrainsMono(
+                        color: tokens.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
                       ),
-                    ),
-                  ),
-                  title: Text(
-                    tx.description,
-                    style: GoogleFonts.mukta(
-                      color: tokens.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '${tx.timestamp.month}/${tx.timestamp.day} • ${tx.postings.length} legs ${tx.receiptPaths.isNotEmpty ? "• 📎" : ""}',
-                    style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 11),
-                  ),
-                  trailing: Text(
-                    CurrencyUtils.format(tx.totalCents, currency: currency),
-                    style: GoogleFonts.jetBrainsMono(
-                      color: tokens.textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
                     ),
                   ),
                 ),
               ),
             );
           }),
-        ],
       ],
     );
   }
@@ -1213,66 +1088,4 @@ class _DashboardScreenState extends State<DashboardScreen>
       builder: (ctx) => CreateSavingsGoalSheet(baseCurrency: currency),
     );
   }
-}
-
-/// Dynamic Bezier Spline Sparkline Painter
-class _SparklineSplinePainter extends CustomPainter {
-  final Color strokeColor;
-  final Color fillGradientColor;
-
-  const _SparklineSplinePainter({
-    required this.strokeColor,
-    required this.fillGradientColor,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final strokePaint = Paint()
-      ..color = strokeColor
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
-
-    final fillPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [fillGradientColor, Colors.transparent],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
-      ..style = PaintingStyle.fill;
-
-    // Smooth simulated financial balance curve
-    final path = Path();
-    final fillPath = Path();
-
-    final points = [
-      Offset(0, size.height * 0.75),
-      Offset(size.width * 0.20, size.height * 0.65),
-      Offset(size.width * 0.45, size.height * 0.70),
-      Offset(size.width * 0.70, size.height * 0.40),
-      Offset(size.width * 0.85, size.height * 0.48),
-      Offset(size.width, size.height * 0.25),
-    ];
-
-    path.moveTo(points[0].dx, points[0].dy);
-    fillPath.moveTo(points[0].dx, size.height);
-    fillPath.lineTo(points[0].dx, points[0].dy);
-
-    for (int i = 0; i < points.length - 1; i++) {
-      final p0 = points[i];
-      final p1 = points[i + 1];
-      final midX = (p0.dx + p1.dx) / 2;
-      path.cubicTo(midX, p0.dy, midX, p1.dy, p1.dx, p1.dy);
-      fillPath.cubicTo(midX, p0.dy, midX, p1.dy, p1.dx, p1.dy);
-    }
-
-    fillPath.lineTo(size.width, size.height);
-    fillPath.close();
-
-    canvas.drawPath(fillPath, fillPaint);
-    canvas.drawPath(path, strokePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

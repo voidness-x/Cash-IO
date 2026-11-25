@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/tokens.dart';
 import '../../../core/theme/frosted_scaffold.dart';
+import '../../../core/security/biometric_auth_service.dart';
 import '../../../core/security/hardware_vault_service.dart';
 import '../../../core/storage/vault_repository.dart';
 import '../../../core/widgets/cashio_logo.dart';
@@ -24,9 +25,9 @@ class _PinAuthScreenState extends State<PinAuthScreen> with TickerProviderStateM
   int _lockoutSeconds = 0;
   Timer? _lockoutTimer;
   bool _isVerifying = false;
+  bool _biometricsReady = false;
+  bool _isBiometricPromptActive = false;
 
-  // Animations
-  late final AnimationController _pulseController;
   late final AnimationController _shakeController;
   late final Animation<double> _shakeAnimation;
 
@@ -34,27 +35,61 @@ class _PinAuthScreenState extends State<PinAuthScreen> with TickerProviderStateM
   void initState() {
     super.initState();
 
-    // 1. Subtle breathing glow animation for vault shield
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2200),
-    )..repeat(reverse: true);
-
-    // 2. Error shake animation
     _shakeController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 450),
+      duration: const Duration(milliseconds: 420),
     );
 
     _shakeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _shakeController, curve: Curves.easeInOut),
     );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeAndPromptBiometrics();
+    });
+  }
+
+  Future<void> _initializeAndPromptBiometrics() async {
+    final prefEnabled = await HardwareVaultService.instance.getBiometricsEnabled();
+    final hwAvailable = await BiometricAuthService.instance.isBiometricAvailable();
+    if (!mounted) return;
+
+    final canUseBiometrics = prefEnabled && hwAvailable;
+    setState(() {
+      _biometricsReady = canUseBiometrics;
+    });
+
+    if (canUseBiometrics) {
+      await _triggerBiometricSignIn();
+    }
+  }
+
+  Future<void> _triggerBiometricSignIn() async {
+    if (_lockoutSeconds > 0 || _isVerifying || _isBiometricPromptActive) return;
+    setState(() => _isBiometricPromptActive = true);
+
+    final authenticated = await BiometricAuthService.instance.authenticate(
+      title: 'Sign in to ${VaultRepository.instance.profileName}',
+      subtitle: 'Touch the fingerprint sensor to unlock your vault',
+      cancelText: 'Use 6-Digit PIN',
+    );
+
+    if (!mounted) return;
+    setState(() => _isBiometricPromptActive = false);
+
+    if (authenticated) {
+      HapticFeedback.mediumImpact();
+      HardwareVaultService.instance.resetLockout(VaultRepository.instance.profileId);
+      await VaultRepository.instance.loadPersistentVault(VaultRepository.instance.profileId);
+      if (mounted) {
+        widget.onAuthenticated();
+      }
+    }
   }
 
   @override
   void dispose() {
     _lockoutTimer?.cancel();
-    _pulseController.dispose();
     _shakeController.dispose();
     super.dispose();
   }
@@ -85,9 +120,7 @@ class _PinAuthScreenState extends State<PinAuthScreen> with TickerProviderStateM
 
   Future<void> _verifyPin() async {
     setState(() => _isVerifying = true);
-
-    // Small delay to allow final dot animation to complete smoothly
-    await Future.delayed(const Duration(milliseconds: 140));
+    await Future.delayed(const Duration(milliseconds: 120));
 
     final isValid = await HardwareVaultService.instance.verifyPin(
       VaultRepository.instance.profileId,
@@ -99,7 +132,9 @@ class _PinAuthScreenState extends State<PinAuthScreen> with TickerProviderStateM
     if (isValid) {
       HapticFeedback.mediumImpact();
       await VaultRepository.instance.loadPersistentVault(VaultRepository.instance.profileId);
-      widget.onAuthenticated();
+      if (mounted) {
+        widget.onAuthenticated();
+      }
     } else {
       HapticFeedback.heavyImpact();
       _shakeController.forward(from: 0.0);
@@ -116,7 +151,7 @@ class _PinAuthScreenState extends State<PinAuthScreen> with TickerProviderStateM
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Incorrect master PIN. ${CashIOTokens.maxFailedAttempts - _failedAttempts} attempts remaining.',
+              'Incorrect PIN. ${CashIOTokens.maxFailedAttempts - _failedAttempts} attempts remaining.',
               style: GoogleFonts.mukta(fontWeight: FontWeight.w600),
             ),
             backgroundColor: CashIOTokens.expense,
@@ -154,120 +189,194 @@ class _PinAuthScreenState extends State<PinAuthScreen> with TickerProviderStateM
     final tokens = context.tokens;
 
     return FrostedScaffold(
-      body: Stack(
-        children: [
-          // Ambient architectural background coordinates
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _ArchitecturalGridPainter(tokens: tokens),
-            ),
-          ),
-          SafeArea(
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: tokens.space6),
-              child: Column(
-                children: [
-                  const Spacer(flex: 2),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compactHeight = constraints.maxHeight < 680;
+            final keyHeight = compactHeight ? 52.0 : 58.0;
+            final keyWidth = ((constraints.maxWidth - 64) / 3).clamp(72.0, 92.0);
 
-                  // Brand Typographic Cash-IO with Centered Spinning Vault 'O' (No Shield)
-                  const CashIOLogo(
-                    fontSize: 32,
-                    animateO: true,
-                    showSubtitle: false,
-                  ),
-                  SizedBox(height: tokens.space3),
-                  Text(
-                    _lockoutSeconds > 0
-                        ? 'SECURITY LOCKOUT ACTIVE: ${_lockoutSeconds}s'
-                        : 'ENTER AIR-GAPPED MASTER PIN',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.mukta(
-                      color: _lockoutSeconds > 0 ? tokens.statusExpense : tokens.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                  SizedBox(height: tokens.space6),
-
-                  // Animated PIN Hexagon/Diamond Indicators with Error Shake
-                  AnimatedBuilder(
-                    animation: _shakeAnimation,
-                    builder: (context, child) {
-                      final offset = sin(_shakeAnimation.value * pi * 6) * 12 * (1.0 - _shakeAnimation.value);
-                      return Transform.translate(
-                        offset: Offset(offset, 0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(CashIOTokens.pinLength, (index) {
-                            final isFilled = index < _enteredPin.length;
-                            return _buildHexagonDot(isFilled: isFilled, tokens: tokens);
-                          }),
-                        ),
-                      );
-                    },
-                  ),
-                  const Spacer(flex: 3),
-
-                  // Tactile Architectural Keypad
-                  _buildKeypad(tokens),
-                  SizedBox(height: tokens.space8),
-                ],
+            return SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                horizontal: tokens.space5,
+                vertical: compactHeight ? tokens.space3 : tokens.space5,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHexagonDot({required bool isFilled, required CashIOThemeExtension tokens}) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-      margin: EdgeInsets.symmetric(horizontal: tokens.space2),
-      width: isFilled ? 18 : 14,
-      height: isFilled ? 18 : 14,
-      decoration: BoxDecoration(
-        color: isFilled ? tokens.accentGold : tokens.bgSurfaceElevated,
-        borderRadius: BorderRadius.circular(tokens.radiusSm),
-        border: Border.all(
-          color: isFilled ? tokens.accentChampagne : tokens.borderHairline,
-          width: 1.2,
-        ),
-        boxShadow: isFilled
-            ? [
-                BoxShadow(
-                  color: tokens.accentGold.withValues(alpha: 0.45),
-                  blurRadius: 10,
-                  spreadRadius: 1,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: (constraints.maxHeight - (compactHeight ? 24 : 40)).clamp(0.0, double.infinity),
                 ),
-              ]
-            : [],
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    SizedBox(height: compactHeight ? tokens.space2 : tokens.space5),
+
+                    // Top Brand & Status Section
+                    Column(
+                      children: [
+                        const CashIOLogo(
+                          fontSize: 30,
+                          animateO: true,
+                          showSubtitle: false,
+                        ),
+                        SizedBox(height: tokens.space2),
+                        Text(
+                          _lockoutSeconds > 0
+                              ? 'SECURITY LOCKOUT ACTIVE • ${_lockoutSeconds}s'
+                              : (_biometricsReady
+                                  ? 'UNLOCK WITH FINGERPRINT OR MASTER PIN'
+                                  : 'ENTER 6-DIGIT MASTER PIN'),
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.spaceGrotesk(
+                            color: _lockoutSeconds > 0 ? tokens.statusExpense : tokens.textSecondary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.9,
+                          ),
+                        ),
+                        SizedBox(height: compactHeight ? tokens.space4 : tokens.space5),
+
+                        // PIN Dots Indicator
+                        AnimatedBuilder(
+                          animation: _shakeAnimation,
+                          builder: (context, child) {
+                            final offset = sin(_shakeAnimation.value * pi * 6) *
+                                10 *
+                                (1.0 - _shakeAnimation.value);
+                            return Transform.translate(
+                              offset: Offset(offset, 0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(CashIOTokens.pinLength, (index) {
+                                  final isFilled = index < _enteredPin.length;
+                                  return _buildPinDot(isFilled: isFilled, tokens: tokens);
+                                }),
+                              ),
+                            );
+                          },
+                        ),
+
+                        // Prominent Fingerprint Unlock Pill
+                        if (_biometricsReady && _lockoutSeconds == 0) ...[
+                          SizedBox(height: compactHeight ? tokens.space4 : tokens.space5),
+                          Semantics(
+                            button: true,
+                            label: 'Sign in with fingerprint sensor',
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _triggerBiometricSignIn,
+                                borderRadius: BorderRadius.circular(tokens.radiusPill),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: tokens.accent.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(tokens.radiusPill),
+                                    border: Border.all(color: tokens.accent.withValues(alpha: 0.45)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.fingerprint_rounded, color: tokens.accent, size: 22),
+                                      const SizedBox(width: 8),
+                                      Flexible(
+                                        child: Text(
+                                          _isBiometricPromptActive
+                                              ? 'Waiting for fingerprint...'
+                                              : 'Tap to Sign In with Fingerprint',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.spaceGrotesk(
+                                            color: tokens.textPrimary,
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+
+                    SizedBox(height: compactHeight ? tokens.space4 : tokens.space6),
+
+                    // Responsive Numeric & Fingerprint Keypad
+                    _buildKeypad(tokens, keyWidth: keyWidth, keyHeight: keyHeight),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
-  Widget _buildKeypad(CashIOThemeExtension tokens) {
+  Widget _buildPinDot({required bool isFilled, required CashIOThemeExtension tokens}) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      curve: Curves.easeOutCubic,
+      margin: const EdgeInsets.symmetric(horizontal: 7),
+      width: isFilled ? 16 : 13,
+      height: isFilled ? 16 : 13,
+      decoration: BoxDecoration(
+        color: isFilled ? tokens.accent : tokens.bgSurfaceElevated,
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: isFilled ? tokens.accent : tokens.borderHairline,
+          width: 1.4,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKeypad(
+    CashIOThemeExtension tokens, {
+    required double keyWidth,
+    required double keyHeight,
+  }) {
     return Column(
       children: [
-        _buildRow(['1', '2', '3'], tokens, subTitles: ['', 'ABC', 'DEF']),
-        SizedBox(height: tokens.space3),
-        _buildRow(['4', '5', '6'], tokens, subTitles: ['GHI', 'JKL', 'MNO']),
-        SizedBox(height: tokens.space3),
-        _buildRow(['7', '8', '9'], tokens, subTitles: ['PQRS', 'TUV', 'WXYZ']),
-        SizedBox(height: tokens.space3),
+        _buildRow(['1', '2', '3'], tokens, keyWidth: keyWidth, keyHeight: keyHeight),
+        const SizedBox(height: 10),
+        _buildRow(['4', '5', '6'], tokens, keyWidth: keyWidth, keyHeight: keyHeight),
+        const SizedBox(height: 10),
+        _buildRow(['7', '8', '9'], tokens, keyWidth: keyWidth, keyHeight: keyHeight),
+        const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Empty placeholder to balance layout
-            SizedBox(width: 84, height: 60),
-            SizedBox(width: tokens.space3),
-            _buildKeypadTile('0', '', tokens, onTap: () => _onDigitPressed('0')),
-            SizedBox(width: tokens.space3),
+            _biometricsReady
+                ? _buildActionTile(
+                    icon: Icons.fingerprint_rounded,
+                    tooltip: 'Unlock with Fingerprint',
+                    tokens: tokens,
+                    keyWidth: keyWidth,
+                    keyHeight: keyHeight,
+                    iconColor: tokens.accent,
+                    onTap: _triggerBiometricSignIn,
+                  )
+                : SizedBox(width: keyWidth, height: keyHeight),
+            const SizedBox(width: 12),
+            _buildKeypadTile(
+              '0',
+              tokens,
+              keyWidth: keyWidth,
+              keyHeight: keyHeight,
+              onTap: () => _onDigitPressed('0'),
+            ),
+            const SizedBox(width: 12),
             _buildActionTile(
               icon: Icons.backspace_outlined,
+              tooltip: 'Delete digit',
               tokens: tokens,
+              keyWidth: keyWidth,
+              keyHeight: keyHeight,
+              iconColor: tokens.textSecondary,
               onTap: _onDeletePressed,
             ),
           ],
@@ -276,82 +385,74 @@ class _PinAuthScreenState extends State<PinAuthScreen> with TickerProviderStateM
     );
   }
 
-  Widget _buildRow(List<String> digits, CashIOThemeExtension tokens, {required List<String> subTitles}) {
+  Widget _buildRow(
+    List<String> digits,
+    CashIOThemeExtension tokens, {
+    required double keyWidth,
+    required double keyHeight,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(digits.length, (i) {
-        return Padding(
-          padding: EdgeInsets.symmetric(horizontal: tokens.space1 * 1.5),
-          child: _buildKeypadTile(
-            digits[i],
-            subTitles[i],
-            tokens,
-            onTap: () => _onDigitPressed(digits[i]),
-          ),
-        );
-      }),
+      children: [
+        _buildKeypadTile(digits[0], tokens, keyWidth: keyWidth, keyHeight: keyHeight, onTap: () => _onDigitPressed(digits[0])),
+        const SizedBox(width: 12),
+        _buildKeypadTile(digits[1], tokens, keyWidth: keyWidth, keyHeight: keyHeight, onTap: () => _onDigitPressed(digits[1])),
+        const SizedBox(width: 12),
+        _buildKeypadTile(digits[2], tokens, keyWidth: keyWidth, keyHeight: keyHeight, onTap: () => _onDigitPressed(digits[2])),
+      ],
     );
   }
 
   Widget _buildKeypadTile(
     String digit,
-    String subTitle,
     CashIOThemeExtension tokens, {
+    required double keyWidth,
+    required double keyHeight,
     required VoidCallback onTap,
   }) {
     return _TactileKeypadButton(
-      width: 84,
-      height: 60,
+      width: keyWidth,
+      height: keyHeight,
       onTap: onTap,
       tokens: tokens,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            digit,
-            style: GoogleFonts.jetBrainsMono(
-              color: tokens.textPrimary,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          if (subTitle.isNotEmpty) ...[
-            Text(
-              subTitle,
-              style: GoogleFonts.mukta(
-                color: tokens.textTertiary,
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 1.2,
-              ),
-            ),
-          ],
-        ],
+      semanticLabel: 'Digit $digit',
+      child: Text(
+        digit,
+        style: GoogleFonts.jetBrainsMono(
+          color: tokens.textPrimary,
+          fontSize: 22,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
 
   Widget _buildActionTile({
     required IconData icon,
+    required String tooltip,
     required CashIOThemeExtension tokens,
+    required double keyWidth,
+    required double keyHeight,
+    required Color iconColor,
     required VoidCallback onTap,
   }) {
     return _TactileKeypadButton(
-      width: 84,
-      height: 60,
+      width: keyWidth,
+      height: keyHeight,
       onTap: onTap,
       tokens: tokens,
-      child: Icon(icon, color: tokens.accentGold, size: 22),
+      semanticLabel: tooltip,
+      child: Icon(icon, color: iconColor, size: 24),
     );
   }
 }
 
-/// Tactile keypad button with micro-scale spring physics on tap
 class _TactileKeypadButton extends StatefulWidget {
   final double width;
   final double height;
   final VoidCallback onTap;
   final CashIOThemeExtension tokens;
+  final String semanticLabel;
   final Widget child;
 
   const _TactileKeypadButton({
@@ -359,6 +460,7 @@ class _TactileKeypadButton extends StatefulWidget {
     required this.height,
     required this.onTap,
     required this.tokens,
+    required this.semanticLabel,
     required this.child,
   });
 
@@ -373,65 +475,30 @@ class _TactileKeypadButtonState extends State<_TactileKeypadButton> {
   Widget build(BuildContext context) {
     final tokens = widget.tokens;
 
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _isPressed = true),
-      onTapUp: (_) {
-        setState(() => _isPressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _isPressed = false),
-      child: AnimatedScale(
-        scale: _isPressed ? 0.94 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOutCubic,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          width: widget.width,
-          height: widget.height,
-          decoration: BoxDecoration(
-            color: _isPressed ? tokens.bgSurfaceElevated : tokens.bgSurface,
-            borderRadius: BorderRadius.circular(tokens.radiusSm),
-            border: Border.all(
-              color: _isPressed ? tokens.accentGold : tokens.borderHairline,
-              width: 1.0,
+    return Semantics(
+      button: true,
+      label: widget.semanticLabel,
+      child: Material(
+        color: _isPressed ? tokens.bgSurfaceElevated : tokens.bgSurface,
+        borderRadius: BorderRadius.circular(tokens.radiusSm),
+        child: InkWell(
+          onHighlightChanged: (pressed) => setState(() => _isPressed = pressed),
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(tokens.radiusSm),
+          child: Container(
+            width: widget.width,
+            height: widget.height,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(tokens.radiusSm),
+              border: Border.all(
+                color: _isPressed ? tokens.accent : tokens.borderHairline,
+                width: 1.0,
+              ),
             ),
-            boxShadow: _isPressed
-                ? [
-                    BoxShadow(
-                      color: tokens.accentGold.withValues(alpha: 0.15),
-                      blurRadius: 8,
-                    ),
-                  ]
-                : null,
+            child: Center(child: widget.child),
           ),
-          child: Center(child: widget.child),
         ),
       ),
     );
   }
-}
-
-/// Subtle architectural grid coordinates painted in the background
-class _ArchitecturalGridPainter extends CustomPainter {
-  final CashIOThemeExtension tokens;
-
-  const _ArchitecturalGridPainter({required this.tokens});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = tokens.borderHairline.withValues(alpha: 0.04)
-      ..strokeWidth = 1.0;
-
-    const step = 48.0;
-    for (double x = 0; x < size.width; x += step) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += step) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -174,8 +174,8 @@ class _UpdateReceiverSheetState extends State<UpdateReceiverSheet> {
     final tokens = context.tokens;
     final snapshots = _service.availableRollbackSnapshots;
     final platformBadge = OtaPlatformBridge.isAndroidNative
-        ? 'Android Self-Updating APK'
-        : (OtaPlatformBridge.isIOSNative ? 'iOS Signed Release OTA' : 'GitHub Releases OTA');
+        ? 'Android APK OTA'
+        : (OtaPlatformBridge.isIOSNative ? 'iOS OTA' : 'GitHub OTA');
 
     return Container(
       padding: EdgeInsets.all(tokens.space5),
@@ -203,27 +203,23 @@ class _UpdateReceiverSheetState extends State<UpdateReceiverSheet> {
 
             // Header
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                Icon(Icons.system_update_alt_rounded, color: tokens.accent, size: 20),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: Row(
-                    children: [
-                      Icon(Icons.system_update_alt_rounded, color: tokens.accent, size: 20),
-                      const SizedBox(width: 8),
-                      Flexible(
-                        child: Text(
-                          'AUTOMATED UPDATE RECEIVER',
-                          style: GoogleFonts.spaceGrotesk(
-                            color: tokens.textPrimary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: Text(
+                    'AUTOMATED UPDATE RECEIVER',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.spaceGrotesk(
+                      color: tokens.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
@@ -257,29 +253,34 @@ class _UpdateReceiverSheetState extends State<UpdateReceiverSheet> {
                 border: Border.all(color: tokens.borderHairline),
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CURRENT INSTALLED VERSION',
-                        style: GoogleFonts.spaceGrotesk(
-                          color: tokens.textTertiary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'CURRENT INSTALLED VERSION',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.spaceGrotesk(
+                            color: tokens.textTertiary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'v${_service.currentVersion} (Build ${_service.currentBuild})',
-                        style: GoogleFonts.jetBrainsMono(
-                          color: tokens.textPrimary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 2),
+                        Text(
+                          'v${_service.currentVersion} (Build ${_service.currentBuild})',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.jetBrainsMono(
+                            color: tokens.textPrimary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: _isChecking
@@ -354,22 +355,27 @@ class _UpdateReceiverSheetState extends State<UpdateReceiverSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'NEW GITHUB RELEASE AVAILABLE • v${_availableUpdate!.version}',
-                          style: GoogleFonts.spaceGrotesk(
-                            color: tokens.accent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.8,
+                        Expanded(
+                          child: Text(
+                            'NEW GITHUB RELEASE • v${_availableUpdate!.version}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.spaceGrotesk(
+                              color: tokens.accent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                            ),
                           ),
                         ),
-                        if (_availableUpdate!.releaseDate.isNotEmpty)
+                        if (_availableUpdate!.releaseDate.isNotEmpty) ...[
+                          const SizedBox(width: 8),
                           Text(
                             _availableUpdate!.releaseDate,
                             style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
                           ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -424,13 +430,18 @@ class _UpdateReceiverSheetState extends State<UpdateReceiverSheet> {
                           ),
                           onPressed: _installUpdate,
                           icon: const Icon(Icons.download_for_offline_outlined, size: 18),
-                          label: Text(
-                            OtaPlatformBridge.isAndroidNative
-                                ? (_needsPermissionRetry
-                                    ? 'PERMISSION GRANTED — INSTALL APK NOW'
-                                    : 'BACKUP VAULT & INSTALL APK UPDATE')
-                                : 'INSTALL UPDATE & BACKUP SNAPSHOT',
-                            style: GoogleFonts.spaceGrotesk(fontSize: 12, fontWeight: FontWeight.w800),
+                          label: Flexible(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                OtaPlatformBridge.isAndroidNative
+                                    ? (_needsPermissionRetry
+                                        ? 'PERMISSION GRANTED — INSTALL APK NOW'
+                                        : 'BACKUP VAULT & INSTALL APK UPDATE')
+                                    : 'INSTALL UPDATE & BACKUP SNAPSHOT',
+                                style: GoogleFonts.spaceGrotesk(fontSize: 12, fontWeight: FontWeight.w800),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -446,13 +457,17 @@ class _UpdateReceiverSheetState extends State<UpdateReceiverSheet> {
               children: [
                 Icon(Icons.history, color: tokens.textSecondary, size: 16),
                 const SizedBox(width: 6),
-                Text(
-                  'EMERGENCY ROLLBACK ARCHIVE (.CASHIO.BAK)',
-                  style: GoogleFonts.spaceGrotesk(
-                    color: tokens.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8,
+                Expanded(
+                  child: Text(
+                    'EMERGENCY ROLLBACK ARCHIVE (.CASHIO.BAK)',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.spaceGrotesk(
+                      color: tokens.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
                   ),
                 ),
               ],
