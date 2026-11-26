@@ -40,7 +40,7 @@ class CashIOThemePreset {
       bgPrimary: darkBg,
       bgSurface: darkSurface,
       bgSurfaceElevated: darkSurfaceElevated,
-      bgSurfaceGlass: darkSurface.withValues(alpha: 0.86),
+      bgSurfaceGlass: darkSurface.withValues(alpha: 0.88),
       borderHighlight: accentColor.withValues(alpha: 0.45),
       accentGold: accentColor,
       accentChampagne: accentLight,
@@ -56,7 +56,7 @@ class CashIOThemePreset {
       bgPrimary: lightBg,
       bgSurface: lightSurface,
       bgSurfaceElevated: lightSurfaceElevated,
-      bgSurfaceGlass: lightSurface.withValues(alpha: 0.92),
+      bgSurfaceGlass: lightSurface.withValues(alpha: 0.94),
       borderHighlight: accentDark,
       accentGold: accentDark,
       accentChampagne: accentColor,
@@ -73,10 +73,22 @@ class CashIOThemePreset {
 class ThemeController extends ChangeNotifier {
   static final ThemeController instance = ThemeController._();
   static const String _storageKey = 'cashio_theme_pref_v1';
+  static const String defaultPresetId = 'indigo_obsidian';
 
   ThemeController._();
 
   static const List<CashIOThemePreset> builtInPresets = [
+    CashIOThemePreset(
+      id: defaultPresetId,
+      name: 'Lavender Obsidian (Default)',
+      tagline: 'Soft lavender purple & deep obsidian',
+      accentColor: Color(0xFF9D8DF1),
+      accentLight: Color(0xFFC4B5FD),
+      accentDark: Color(0xFF7C6AE6),
+      darkBg: Color(0xFF0B0F17),
+      darkSurface: Color(0xFF161D2B),
+      darkSurfaceElevated: Color(0xFF222C40),
+    ),
     CashIOThemePreset(
       id: OriginalCashIOThemeSnapshot.presetId,
       name: OriginalCashIOThemeSnapshot.presetName,
@@ -208,6 +220,33 @@ class ThemeController extends ChangeNotifier {
     }
   }
 
+  /// Applies a live unpersisted preview inside Theme Studio (can be committed or reverted).
+  void previewTheme({CashIOThemePreset? preset, ThemeMode? mode}) {
+    if (preset != null) _activePreset = preset;
+    if (mode != null) _themeMode = mode;
+    notifyListeners();
+  }
+
+  /// Applies a live unpersisted custom color preview inside Theme Studio.
+  void previewCustomColors({
+    required Color accent,
+    Color? surface,
+    Color? background,
+  }) {
+    _activePreset = _buildCustomPreset(
+      accent: accent,
+      surface: surface,
+      background: background,
+    );
+    notifyListeners();
+  }
+
+  /// Persists the currently active theme (preset + mode) to local device storage.
+  Future<void> commitCurrentTheme() async {
+    notifyListeners();
+    await _persist();
+  }
+
   /// Selects one of the curated built-in theme presets and persists it.
   Future<void> selectPreset(String presetId) async {
     final match = builtInPresets.where((p) => p.id == presetId);
@@ -239,9 +278,16 @@ class ThemeController extends ChangeNotifier {
     await _persist();
   }
 
+  /// Restores the default Indigo Obsidian theme preset.
+  Future<void> resetToDefault() async {
+    _activePreset = builtInPresets.firstWhere((p) => p.id == defaultPresetId);
+    notifyListeners();
+    await _persist();
+  }
+
   /// Restores the archived Cyber Teal (Original) theme preset.
   Future<void> resetToOriginal() async {
-    _activePreset = builtInPresets.first;
+    _activePreset = builtInPresets.firstWhere((p) => p.id == OriginalCashIOThemeSnapshot.presetId);
     notifyListeners();
     await _persist();
   }

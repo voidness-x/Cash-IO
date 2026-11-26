@@ -181,10 +181,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             showModalBottomSheet(
                               context: context,
                               isScrollControlled: true,
-                              backgroundColor: tokens.bgSurface,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.vertical(top: Radius.circular(tokens.radiusLg)),
-                              ),
+                              backgroundColor: Colors.transparent,
                               builder: (ctx) => const ThemeCustomizerSheet(),
                             );
                           },

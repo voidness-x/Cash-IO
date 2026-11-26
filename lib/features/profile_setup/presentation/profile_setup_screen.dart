@@ -313,17 +313,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
         },
         child: SafeArea(
           child: AnimatedSwitcher(
-            duration: CashIOTokens.animSmooth,
-            switchInCurve: Curves.easeInOutCubic,
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : const Duration(milliseconds: 240),
+            switchInCurve: Curves.easeOutCubic,
             switchOutCurve: Curves.easeInCubic,
             transitionBuilder: (child, animation) {
+              if (MediaQuery.disableAnimationsOf(context)) return child;
+              final scale = Tween<double>(begin: 0.95, end: 1.0).animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              );
               return FadeTransition(
                 opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0.0, 0.03),
-                    end: Offset.zero,
-                  ).animate(animation),
+                child: ScaleTransition(
+                  scale: scale,
                   child: child,
                 ),
               );
@@ -380,13 +383,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                 },
                 child: Column(
                   children: [
-                    _buildAnimatedLogoTitle(tokens.textPrimary),
+                    _buildAnimatedLogoTitle(tokens),
                     const SizedBox(height: CashIOTokens.space3),
                     Text(
                       'AIR-GAPPED ZERO-KNOWLEDGE LEDGER',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.mukta(
-                        color: CashIOTokens.brand.withValues(alpha: 0.95),
+                        color: tokens.accentGold.withValues(alpha: 0.95),
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 1.8,
@@ -421,17 +424,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
                           color: tokens.bgSurface,
                           borderRadius: BorderRadius.circular(CashIOTokens.radiusPill),
                           border: Border.all(
-                            color: CashIOTokens.brand.withValues(alpha: 0.5),
+                            color: tokens.accentGold.withValues(alpha: 0.55),
                             width: 1.2,
                           ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.arrow_upward_rounded,
                               size: 18,
-                              color: CashIOTokens.brand,
+                              color: tokens.accentGold,
                             ),
                             const SizedBox(width: 10),
                             Flexible(
@@ -462,12 +465,12 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     );
   }
 
-  Widget _buildAnimatedLogoTitle(Color textColor) {
+  Widget _buildAnimatedLogoTitle(CashIOThemeExtension tokens) {
     if (!_isCipherFinished) {
       return Text(
         '$_currentDecryptedPrefix$_currentFlickerSuffix',
         style: GoogleFonts.spaceGrotesk(
-          color: textColor,
+          color: tokens.textPrimary,
           fontSize: 34,
           fontWeight: FontWeight.w800,
           letterSpacing: 2.0,
@@ -478,8 +481,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen>
     return CashIOLogo(
       fontSize: 36,
       animateO: true,
-      textColor: textColor,
-      accentColor: CashIOTokens.brand,
+      textColor: tokens.textPrimary,
+      accentColor: tokens.accentGold,
     );
   }
 

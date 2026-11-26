@@ -327,9 +327,17 @@ class _PinAuthScreenState extends State<PinAuthScreen> with TickerProviderStateM
         color: isFilled ? tokens.accent : tokens.bgSurfaceElevated,
         shape: BoxShape.circle,
         border: Border.all(
-          color: isFilled ? tokens.accent : tokens.borderHairline,
+          color: isFilled ? tokens.accentChampagne : tokens.borderHairline,
           width: 1.4,
         ),
+        boxShadow: isFilled
+            ? [
+                BoxShadow(
+                  color: tokens.accent.withValues(alpha: 0.45),
+                  blurRadius: 10,
+                ),
+              ]
+            : null,
       ),
     );
   }

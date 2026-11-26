@@ -1,10 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../widgets/pop_up_route.dart';
 import 'theme_controller.dart';
 import 'tokens.dart';
 
 class CashIOTheme {
   CashIOTheme._();
+
+  static const PageTransitionsTheme _popUpTransitions = PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: PopUpPageTransitionsBuilder(),
+      TargetPlatform.iOS: PopUpPageTransitionsBuilder(),
+      TargetPlatform.windows: PopUpPageTransitionsBuilder(),
+      TargetPlatform.macOS: PopUpPageTransitionsBuilder(),
+      TargetPlatform.linux: PopUpPageTransitionsBuilder(),
+    },
+  );
 
   static ThemeData get darkTheme => buildDarkTheme(ThemeController.instance.darkExtension);
 
@@ -20,6 +31,7 @@ class CashIOTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      pageTransitionsTheme: _popUpTransitions,
       extensions: [ext],
       scaffoldBackgroundColor: ext.bgPrimary,
       primaryColor: ext.accentGold,
@@ -147,6 +159,7 @@ class CashIOTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      pageTransitionsTheme: _popUpTransitions,
       extensions: [ext],
       scaffoldBackgroundColor: ext.bgPrimary,
       primaryColor: ext.accentGold,

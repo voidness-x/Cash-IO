@@ -25,7 +25,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 60));
     }
 
-    expect(find.text('CASH-I'), findsOneWidget);
+    expect(find.text('CASH-IO', findRichText: true), findsOneWidget);
     expect(find.byType(CashIOLogo), findsOneWidget);
     expect(find.text('Swipe up or tap to start'), findsOneWidget);
   });

@@ -86,8 +86,9 @@ class SavingsGoalsDeck extends StatelessWidget {
         ),
         const SizedBox(height: 8),
 
-        if (goals.isEmpty)
+        if (goals.isEmpty) ...[
           Container(
+            key: const ValueKey('savings_empty_card'),
             padding: EdgeInsets.all(tokens.space4),
             decoration: BoxDecoration(
               color: tokens.bgSurface,
@@ -133,8 +134,9 @@ class SavingsGoalsDeck extends StatelessWidget {
                 ),
               ],
             ),
-          )
-        else
+          ),
+          SizedBox(height: tokens.space3),
+        ] else ...[
           ...goals.map((goal) {
             final progress = goal.progressPercentage;
             final isFullyFunded = goal.currentBalanceCents >= goal.targetAmountCents;
@@ -283,9 +285,11 @@ class SavingsGoalsDeck extends StatelessWidget {
               ),
             );
           }),
+        ],
 
         // Spare-Change Round-Up Simulator Card
         Container(
+          key: const ValueKey('savings_roundups_card'),
           padding: EdgeInsets.all(tokens.space3),
           decoration: BoxDecoration(
             color: tokens.bgSurfaceElevated,

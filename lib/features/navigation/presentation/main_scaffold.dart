@@ -61,29 +61,18 @@ class _MainScaffoldState extends State<MainScaffold> {
         children: [
           Positioned.fill(
             child: AnimatedSwitcher(
-              duration: disableAnim ? Duration.zero : const Duration(milliseconds: 300),
+              duration: disableAnim ? Duration.zero : const Duration(milliseconds: 240),
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               transitionBuilder: (child, animation) {
-                final childKey = child.key;
-                final isCenterPopUp = childKey is ValueKey<int> && childKey.value == 2;
-                if (isCenterPopUp && !disableAnim) {
-                  // Distinct pop-up emergence from the raised center 'O' hub
-                  final slide = Tween<Offset>(
-                    begin: const Offset(0, 0.055),
-                    end: Offset.zero,
-                  ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
-                  final scale = Tween<double>(begin: 0.965, end: 1.0)
-                      .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
-                  return FadeTransition(
-                    opacity: animation,
-                    child: SlideTransition(
-                      position: slide,
-                      child: ScaleTransition(scale: scale, child: child),
-                    ),
-                  );
-                }
-                return FadeTransition(opacity: animation, child: child);
+                if (disableAnim) return child;
+                final scale = Tween<double>(begin: 0.955, end: 1.0).animate(
+                  CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                );
+                return FadeTransition(
+                  opacity: animation,
+                  child: ScaleTransition(scale: scale, child: child),
+                );
               },
               child: KeyedSubtree(
                 key: ValueKey<int>(_currentIndex),
@@ -92,7 +81,7 @@ class _MainScaffoldState extends State<MainScaffold> {
             ),
           ),
 
-          // Detached Floating Pill Navigation Dock + Raised Center Cash-IO 'O' Medallion
+          // Detached Floating Pill Navigation Dock + Compact Integrated Cash-IO 'O' Hub
           Positioned(
             left: 14,
             right: 14,
@@ -100,7 +89,7 @@ class _MainScaffoldState extends State<MainScaffold> {
             child: SafeArea(
               top: false,
               child: SizedBox(
-                height: 80,
+                height: 66,
                 child: Stack(
                   clipBehavior: Clip.none,
                   alignment: Alignment.bottomCenter,
@@ -108,15 +97,15 @@ class _MainScaffoldState extends State<MainScaffold> {
                     // Frosted Floating Bar
                     ClipRRect(
                       key: const ValueKey('floating_nav_bar'),
-                      borderRadius: BorderRadius.circular(28),
+                      borderRadius: BorderRadius.circular(26),
                       child: BackdropFilter(
                         filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                         child: Container(
-                          height: 62,
+                          height: 60,
                           padding: const EdgeInsets.symmetric(horizontal: 6),
                           decoration: BoxDecoration(
                             color: tokens.bgSurfaceGlass,
-                            borderRadius: BorderRadius.circular(28),
+                            borderRadius: BorderRadius.circular(26),
                             border: Border.all(
                               color: isDashboard
                                   ? tokens.accentGold.withValues(alpha: 0.42)
@@ -125,14 +114,14 @@ class _MainScaffoldState extends State<MainScaffold> {
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.38),
-                                blurRadius: 22,
-                                offset: const Offset(0, 10),
+                                color: Colors.black.withValues(alpha: 0.34),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
                               ),
                               if (isDashboard)
                                 BoxShadow(
                                   color: tokens.accentGold.withValues(alpha: 0.16),
-                                  blurRadius: 18,
+                                  blurRadius: 16,
                                   offset: const Offset(0, 2),
                                 ),
                             ],
@@ -155,8 +144,8 @@ class _MainScaffoldState extends State<MainScaffold> {
                                 activeIcon: Icons.pie_chart_rounded,
                                 label: 'Budgets',
                               ),
-                              // Spacer cradle directly beneath the raised center 'O' button
-                              const SizedBox(width: 72),
+                              // Compact cradle directly beneath the integrated center 'O' button
+                              const SizedBox(width: 56),
                               _buildDockTab(
                                 tokens: tokens,
                                 key: const ValueKey('nav_tab_forecast'),
@@ -179,9 +168,9 @@ class _MainScaffoldState extends State<MainScaffold> {
                       ),
                     ),
 
-                    // Raised Center Pop-Up Dashboard Button with exact Cash-IO 'O' logo
+                    // Compact Integrated Center Dashboard Button with Cash-IO 'O' Emblem
                     Positioned(
-                      top: 0,
+                      top: 2,
                       child: Semantics(
                         label: 'Dashboard Home',
                         button: true,
@@ -190,13 +179,13 @@ class _MainScaffoldState extends State<MainScaffold> {
                           key: const ValueKey('center_dashboard_o_button'),
                           onTap: () => _selectTab(2),
                           child: AnimatedScale(
-                            scale: isDashboard ? 1.07 : 0.98,
-                            duration: const Duration(milliseconds: 220),
-                            curve: Curves.easeOutBack,
+                            scale: isDashboard ? 1.04 : 0.96,
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutCubic,
                             child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 240),
-                              width: 62,
-                              height: 62,
+                              duration: const Duration(milliseconds: 220),
+                              width: 48,
+                              height: 48,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: LinearGradient(
@@ -205,7 +194,7 @@ class _MainScaffoldState extends State<MainScaffold> {
                                   colors: isDashboard
                                       ? [
                                           Color.alphaBlend(
-                                            tokens.accentGold.withValues(alpha: 0.28),
+                                            tokens.accentGold.withValues(alpha: 0.26),
                                             tokens.bgSurfaceElevated,
                                           ),
                                           tokens.bgPrimary,
@@ -218,28 +207,28 @@ class _MainScaffoldState extends State<MainScaffold> {
                                 border: Border.all(
                                   color: isDashboard
                                       ? tokens.accentChampagne
-                                      : tokens.accentGold.withValues(alpha: 0.55),
-                                  width: isDashboard ? 2.2 : 1.5,
+                                      : tokens.accentGold.withValues(alpha: 0.50),
+                                  width: isDashboard ? 1.8 : 1.3,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: tokens.accentGold.withValues(
-                                      alpha: isDashboard ? 0.48 : 0.22,
+                                      alpha: isDashboard ? 0.42 : 0.16,
                                     ),
-                                    blurRadius: isDashboard ? 20 : 10,
-                                    spreadRadius: isDashboard ? 1 : 0,
-                                    offset: const Offset(0, 4),
+                                    blurRadius: isDashboard ? 16 : 8,
+                                    spreadRadius: isDashboard ? 0.5 : 0,
+                                    offset: const Offset(0, 3),
                                   ),
                                   BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.4),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 6),
+                                    color: Colors.black.withValues(alpha: 0.34),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
                                   ),
                                 ],
                               ),
                               child: Center(
                                 child: VaultOMark(
-                                  size: 30,
+                                  size: 24,
                                   animate: isDashboard,
                                   color: tokens.accentGold,
                                   accentColor: tokens.accentChampagne,

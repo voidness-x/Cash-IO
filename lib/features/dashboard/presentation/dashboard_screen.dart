@@ -346,7 +346,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   SizedBox(height: tokens.space4),
                 ],
 
-                // 1. HERO TOTAL MONEY CARD (Glowing, Breathable, Zero Overflow)
+                // 1. HERO TOTAL MONEY CARD (Glowing, Breathable, Cashew-Clean)
                 _buildCurrentCashDeck(
                   tokens: tokens,
                   currentCashCents: repo.totalAssetsCents,
@@ -359,38 +359,431 @@ class _DashboardScreenState extends State<DashboardScreen>
                   onOpenRecurring: () => _openRecurringBillsSheet(context, currency),
                   onOpenFx: () => _openFxConverterSheet(context, currency),
                 ),
+                SizedBox(height: tokens.space3),
+
+                // 2. CASHEW-STYLE SIDE-BY-SIDE 30-DAY INCOME & SPENT CARDS
+                _buildCashewFlowCards(
+                  tokens: tokens,
+                  incomeCents: income30d,
+                  expenseCents: expense30d,
+                  currency: currency,
+                ),
                 SizedBox(height: tokens.space4),
 
-                // 2. FOCUS VIEW SWITCHER (Eliminates cluttered vertical wall of cards)
+                // 3. GLANCEABLE HORIZONTAL MONTHLY BUDGETS STRIP
+                _buildCashewBudgetsStrip(
+                  tokens: tokens,
+                  envelopes: repo.envelopes,
+                  currency: currency,
+                ),
+                SizedBox(height: tokens.space4),
+
+                // 4. FOCUS VIEW SWITCHER (Smooth Pop-Up Switching — Zero Clutter)
                 _buildFocusTabSelector(tokens),
                 SizedBox(height: tokens.space3),
 
-                if (_selectedFocusTab == 0) ...[
-                  _buildCashFlowHealthBar(
-                    tokens: tokens,
-                    incomeCents: income30d,
-                    expenseCents: expense30d,
-                    currency: currency,
+                AnimatedSwitcher(
+                  duration: MediaQuery.disableAnimationsOf(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 220),
+                  switchInCurve: Curves.easeOutCubic,
+                  switchOutCurve: Curves.easeInCubic,
+                  transitionBuilder: (child, animation) {
+                    if (MediaQuery.disableAnimationsOf(context)) return child;
+                    final scale = Tween<double>(begin: 0.97, end: 1.0).animate(
+                      CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+                    );
+                    return FadeTransition(
+                      opacity: animation,
+                      child: ScaleTransition(scale: scale, child: child),
+                    );
+                  },
+                  child: KeyedSubtree(
+                    key: ValueKey<int>(_selectedFocusTab),
+                    child: _selectedFocusTab == 0
+                        ? Column(
+                            children: [
+                              _buildCashFlowHealthBar(
+                                tokens: tokens,
+                                incomeCents: income30d,
+                                expenseCents: expense30d,
+                                currency: currency,
+                              ),
+                              SizedBox(height: tokens.space3),
+                              FinancialAdvisoryCard(
+                                onOpenSavingsGoals: () => _openCreateGoalSheet(context, currency),
+                              ),
+                            ],
+                          )
+                        : _selectedFocusTab == 1
+                            ? SavingsGoalsDeck(currency: currency)
+                            : CategorySpendingDonutCard(currency: currency),
                   ),
-                  SizedBox(height: tokens.space3),
-                  FinancialAdvisoryCard(
-                    onOpenSavingsGoals: () => _openCreateGoalSheet(context, currency),
-                  ),
-                ] else if (_selectedFocusTab == 1) ...[
-                  SavingsGoalsDeck(currency: currency),
-                ] else ...[
-                  CategorySpendingDonutCard(currency: currency),
-                ],
+                ),
 
                 SizedBox(height: tokens.space5),
 
-                // 3. RECENT ACTIVITY & SEARCH
+                // 5. COLOR-CODED RECENT ACTIVITY & SEARCH
                 _buildRecentActivitySection(context, tokens, transactions, currency, repo.profileId),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildCashewFlowCards({
+    required CashIOThemeExtension tokens,
+    required int incomeCents,
+    required int expenseCents,
+    required String currency,
+  }) {
+    final totalFlow = incomeCents + expenseCents;
+    final incomeRatio = totalFlow > 0 ? (incomeCents / totalFlow).clamp(0.06, 1.0) : 0.0;
+    final expenseRatio = totalFlow > 0 ? (expenseCents / totalFlow).clamp(0.06, 1.0) : 0.0;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Container(
+            key: const ValueKey('cashew_income_card'),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: tokens.bgSurface,
+              borderRadius: BorderRadius.circular(tokens.radiusMd),
+              border: Border.all(color: tokens.borderHairline),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: tokens.statusIncome.withValues(alpha: 0.14),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.south_west_rounded, size: 14, color: tokens.statusIncome),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'INCOME',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          color: tokens.textSecondary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '30d',
+                      style: GoogleFonts.mukta(
+                        color: tokens.textTertiary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 22,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '+${CurrencyUtils.format(incomeCents, currency: currency)}',
+                      style: GoogleFonts.jetBrainsMono(
+                        color: tokens.statusIncome,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                AnimatedMoneyBar(
+                  value: incomeRatio,
+                  height: 5,
+                  fillColor: tokens.statusIncome,
+                  glow: false,
+                ),
+              ],
+            ),
+          ),
+        ),
+        SizedBox(width: tokens.space3),
+        Expanded(
+          child: Container(
+            key: const ValueKey('cashew_spent_card'),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: tokens.bgSurface,
+              borderRadius: BorderRadius.circular(tokens.radiusMd),
+              border: Border.all(color: tokens.borderHairline),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 26,
+                      height: 26,
+                      decoration: BoxDecoration(
+                        color: tokens.statusExpense.withValues(alpha: 0.14),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.north_east_rounded, size: 14, color: tokens.statusExpense),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'SPENT',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          color: tokens.textSecondary,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '30d',
+                      style: GoogleFonts.mukta(
+                        color: tokens.textTertiary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 22,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '-${CurrencyUtils.format(expenseCents, currency: currency)}',
+                      style: GoogleFonts.jetBrainsMono(
+                        color: tokens.statusExpense,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                AnimatedMoneyBar(
+                  value: expenseRatio,
+                  height: 5,
+                  fillColor: tokens.statusExpense,
+                  glow: false,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCashewBudgetsStrip({
+    required CashIOThemeExtension tokens,
+    required List<EnvelopeModel> envelopes,
+    required String currency,
+  }) {
+    return KeyedSubtree(
+      key: const ValueKey('cashew_budgets_strip'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'MONTHLY BUDGETS',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.spaceGrotesk(
+                    color: tokens.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ),
+              Text(
+                '${envelopes.length} active',
+                style: GoogleFonts.mukta(
+                  color: tokens.textTertiary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (envelopes.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: tokens.bgSurface,
+                borderRadius: BorderRadius.circular(tokens.radiusMd),
+                border: Border.all(color: tokens.borderHairline),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: tokens.accentGold.withValues(alpha: 0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.pie_chart_outline_rounded, size: 17, color: tokens.accentGold),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'No monthly budgets yet',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.spaceGrotesk(
+                            color: tokens.textPrimary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          'Open Budgets to set calm monthly spending caps.',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.mukta(
+                            color: tokens.textSecondary,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: envelopes.map((env) {
+                  final assigned = env.assignedCents;
+                  final spent = env.spentCents;
+                  final remaining = env.remainingCents;
+                  final isOver = remaining < 0;
+                  final ratio = assigned > 0 ? (spent / assigned).clamp(0.0, 1.0) : 0.0;
+                  final barColor = isOver
+                      ? tokens.statusExpense
+                      : (ratio >= 0.8 ? tokens.accentChampagne : tokens.accentGold);
+
+                  return Container(
+                    width: 168,
+                    margin: const EdgeInsets.only(right: 10),
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                      color: tokens.bgSurface,
+                      borderRadius: BorderRadius.circular(tokens.radiusMd),
+                      border: Border.all(
+                        color: isOver
+                            ? tokens.statusExpense.withValues(alpha: 0.45)
+                            : tokens.borderHairline,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: barColor.withValues(alpha: 0.14),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(env.icon, size: 14, color: barColor),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                env.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.spaceGrotesk(
+                                  color: tokens.textPrimary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              '${CurrencyUtils.format(remaining.abs(), currency: currency)} ${isOver ? 'over' : 'left'}',
+                              style: GoogleFonts.jetBrainsMono(
+                                color: isOver ? tokens.statusExpense : tokens.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        AnimatedMoneyBar(
+                          value: ratio,
+                          height: 6,
+                          fillColor: barColor,
+                          glow: false,
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${CurrencyUtils.format(spent, currency: currency)} / ${CurrencyUtils.format(assigned, currency: currency)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.mukta(
+                            color: tokens.textTertiary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -582,6 +975,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                         style: FilledButton.styleFrom(
                           backgroundColor: tokens.statusIncome,
                           foregroundColor: tokens.bgPrimary,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(tokens.radiusPill),
+                          ),
                           padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
                         ),
                       ),
@@ -600,6 +996,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                           backgroundColor: tokens.bgSurfaceElevated,
                           foregroundColor: tokens.textPrimary,
                           side: BorderSide(color: tokens.borderHairline),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(tokens.radiusPill),
+                          ),
                           padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
                         ),
                       ),
@@ -619,6 +1018,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                           backgroundColor: tokens.bgSurfaceElevated,
                           foregroundColor: tokens.textPrimary,
                           side: BorderSide(color: tokens.accentGold.withValues(alpha: 0.45)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(tokens.radiusPill),
+                          ),
                           padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
                         ),
                       ),
@@ -631,9 +1033,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       style: IconButton.styleFrom(
                         side: BorderSide(color: tokens.borderHairline),
                         backgroundColor: tokens.bgSurfaceElevated,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(tokens.radiusSm),
-                        ),
+                        shape: const CircleBorder(),
                       ),
                     ),
                   ],
@@ -642,7 +1042,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
 
-          // Cash & Debts Split Footer (100% Overflow-Safe)
+          // Cash & Debts Split Footer with Animated Balance Ratio Bar (100% Overflow-Safe)
           Container(
             padding: EdgeInsets.symmetric(horizontal: tokens.space4, vertical: tokens.space3),
             decoration: BoxDecoration(
@@ -650,65 +1050,93 @@ class _DashboardScreenState extends State<DashboardScreen>
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(tokens.radiusMd)),
               border: Border(top: BorderSide(color: tokens.borderSubtle)),
             ),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CASH & BANK',
-                        style: GoogleFonts.spaceGrotesk(
-                          color: tokens.textTertiary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          CurrencyUtils.format(currentCashCents, currency: currency),
-                          style: GoogleFonts.jetBrainsMono(
-                            color: tokens.statusIncome,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                AnimatedSegmentedMoneyBar(
+                  height: 4,
+                  segments: [
+                    MoneyBarSegment(
+                      weight: (currentCashCents.abs() + totalLiabilitiesCents.abs()) > 0
+                          ? (currentCashCents.clamp(0, 1 << 60) /
+                                  (currentCashCents.abs() + totalLiabilitiesCents.abs()))
+                              .clamp(0.06, 0.96)
+                          : 0.94,
+                      color: tokens.statusIncome,
+                    ),
+                    MoneyBarSegment(
+                      weight: (currentCashCents.abs() + totalLiabilitiesCents.abs()) > 0
+                          ? (totalLiabilitiesCents.abs() /
+                                  (currentCashCents.abs() + totalLiabilitiesCents.abs()))
+                              .clamp(0.04, 0.94)
+                          : 0.06,
+                      color: totalLiabilitiesCents > 0
+                          ? tokens.statusExpense
+                          : tokens.borderHairline,
+                    ),
+                  ],
                 ),
-                Container(width: 1, height: 28, color: tokens.borderSubtle),
-                SizedBox(width: tokens.space3),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'DEBTS',
-                        style: GoogleFonts.spaceGrotesk(
-                          color: tokens.textTertiary,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          CurrencyUtils.format(totalLiabilitiesCents, currency: currency),
-                          style: GoogleFonts.jetBrainsMono(
-                            color: tokens.statusExpense,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'CASH & BANK',
+                            style: GoogleFonts.spaceGrotesk(
+                              color: tokens.textTertiary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              CurrencyUtils.format(currentCashCents, currency: currency),
+                              style: GoogleFonts.jetBrainsMono(
+                                color: tokens.statusIncome,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                    Container(width: 1, height: 28, color: tokens.borderSubtle),
+                    SizedBox(width: tokens.space3),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'DEBTS',
+                            style: GoogleFonts.spaceGrotesk(
+                              color: tokens.textTertiary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              CurrencyUtils.format(totalLiabilitiesCents, currency: currency),
+                              style: GoogleFonts.jetBrainsMono(
+                                color: tokens.statusExpense,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -932,7 +1360,12 @@ class _DashboardScreenState extends State<DashboardScreen>
           )
         else
           ...filtered.take(20).map((tx) {
+            final meta = _classifyTransaction(tx, repo, tokens);
+            final formattedAmount = '${meta.prefix}${CurrencyUtils.format(tx.totalCents, currency: currency)}';
+            final dateLabel = '${tx.timestamp.month}/${tx.timestamp.day}/${tx.timestamp.year}';
+
             return Container(
+              key: ValueKey('tx_row_${tx.id}'),
               margin: const EdgeInsets.only(bottom: 8),
               decoration: BoxDecoration(
                 color: tokens.bgSurface,
@@ -940,7 +1373,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                 border: Border.all(color: tokens.borderHairline),
               ),
               child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
                 onTap: tx.receiptPaths.isNotEmpty
                     ? () {
                         showDialog(
@@ -953,16 +1386,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                       }
                     : null,
                 leading: Container(
-                  width: 38,
-                  height: 38,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: tokens.bgSurfaceElevated,
-                    borderRadius: BorderRadius.circular(tokens.radiusSm),
-                    border: Border.all(color: tokens.borderHairline),
+                    color: meta.tint.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: meta.tint.withValues(alpha: 0.28)),
                   ),
                   child: Icon(
-                    tx.receiptPaths.isNotEmpty ? Icons.receipt_long : Icons.swap_horiz_rounded,
-                    color: tokens.accentGold,
+                    tx.receiptPaths.isNotEmpty ? Icons.receipt_long_rounded : meta.icon,
+                    color: meta.tint,
                     size: 19,
                   ),
                 ),
@@ -980,7 +1413,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   children: [
                     Flexible(
                       child: Text(
-                        '${tx.timestamp.month}/${tx.timestamp.day}/${tx.timestamp.year}',
+                        '${meta.categoryLabel} • $dateLabel',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
@@ -993,15 +1426,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ],
                 ),
                 trailing: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 135),
+                  constraints: const BoxConstraints(maxWidth: 138),
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
                     child: Text(
-                      CurrencyUtils.format(tx.totalCents, currency: currency),
+                      formattedAmount,
                       style: GoogleFonts.jetBrainsMono(
-                        color: tokens.textPrimary,
-                        fontWeight: FontWeight.w700,
+                        color: meta.amountColor,
+                        fontWeight: FontWeight.w800,
                         fontSize: 13,
                       ),
                     ),
@@ -1011,6 +1444,51 @@ class _DashboardScreenState extends State<DashboardScreen>
             );
           }),
       ],
+    );
+  }
+
+  ({String prefix, Color tint, Color amountColor, IconData icon, String categoryLabel}) _classifyTransaction(
+    TransactionModel tx,
+    VaultRepository repo,
+    CashIOThemeExtension tokens,
+  ) {
+    final accountById = <String, AccountModel>{
+      for (final acc in repo.accounts) acc.id: acc,
+    };
+
+    AccountModel? expenseAcc;
+    AccountModel? incomeAcc;
+    for (final posting in tx.postings) {
+      final acc = accountById[posting.accountId];
+      if (acc == null) continue;
+      if (acc.type == AccountType.expense) expenseAcc ??= acc;
+      if (acc.type == AccountType.income) incomeAcc ??= acc;
+    }
+
+    if (expenseAcc != null) {
+      return (
+        prefix: '-',
+        tint: tokens.statusExpense,
+        amountColor: tokens.statusExpense,
+        icon: expenseAcc.icon,
+        categoryLabel: expenseAcc.name,
+      );
+    }
+    if (incomeAcc != null) {
+      return (
+        prefix: '+',
+        tint: tokens.statusIncome,
+        amountColor: tokens.statusIncome,
+        icon: incomeAcc.icon,
+        categoryLabel: incomeAcc.name,
+      );
+    }
+    return (
+      prefix: '',
+      tint: tokens.accentGold,
+      amountColor: tokens.textPrimary,
+      icon: Icons.swap_horiz_rounded,
+      categoryLabel: 'Transfer',
     );
   }
 

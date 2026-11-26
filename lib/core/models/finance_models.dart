@@ -80,7 +80,7 @@ class TransactionModel {
   }
 
   int get totalCents => postings.isNotEmpty
-      ? postings.map((p) => p.amountCents.abs()).reduce((a, b) => a > b ? a : b) ~/ 2
+      ? postings.fold<int>(0, (sum, p) => sum + p.amountCents.abs()) ~/ 2
       : 0;
 }
 

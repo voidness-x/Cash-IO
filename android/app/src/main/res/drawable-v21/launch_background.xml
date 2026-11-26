@@ -1,12 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- Cash-IO Default Obsidian (#0B0F17) + Lighter Lavender Purple (#9D8DF1) Launch Splash -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="?android:colorBackground" />
-
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#0B0F17" />
+        </shape>
+    </item>
+    <item android:width="72dp" android:height="72dp" android:gravity="center">
+        <shape
+            android:shape="ring"
+            android:innerRadiusRatio="2.8"
+            android:thickness="8dp"
+            android:useLevel="false">
+            <solid android:color="#9D8DF1" />
+        </shape>
+    </item>
 </layer-list>

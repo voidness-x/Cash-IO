@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/tokens.dart';
 
-/// Clean, high-end typographic Cash-IO Logo with a mathematically centered spinning vault 'O'.
-/// Zero wobbles, zero font-metric offsets, perfectly balanced.
-class CashIOLogo extends StatefulWidget {
+/// Clean typographic Cash-IO wordmark with a normal matching 'O' tinted in the
+/// active theme accent so every letter shares the exact same baseline and weight.
+class CashIOLogo extends StatelessWidget {
   final double fontSize;
   final bool animateO;
   final Color? textColor;
@@ -22,82 +22,46 @@ class CashIOLogo extends StatefulWidget {
   });
 
   @override
-  State<CashIOLogo> createState() => _CashIOLogoState();
-}
-
-class _CashIOLogoState extends State<CashIOLogo> with SingleTickerProviderStateMixin {
-  late final AnimationController _rotationController;
-
-  @override
-  void initState() {
-    super.initState();
-    _rotationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 3200),
-    );
-
-    if (widget.animateO) {
-      _rotationController.repeat();
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant CashIOLogo oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.animateO && !_rotationController.isAnimating) {
-      _rotationController.repeat();
-    } else if (!widget.animateO && _rotationController.isAnimating) {
-      _rotationController.stop();
-    }
-  }
-
-  @override
-  void dispose() {
-    _rotationController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final primaryTextColor = widget.textColor ?? tokens.textPrimary;
-    final primaryAccent = widget.accentColor ?? tokens.accentGold;
-    final oSize = widget.fontSize * 0.76;
+    final primaryTextColor = textColor ?? tokens.textPrimary;
+    final primaryAccent = accentColor ?? tokens.accentGold;
+    final baseStyle = GoogleFonts.spaceGrotesk(
+      color: primaryTextColor,
+      fontSize: fontSize,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 1.5,
+      height: 1.0,
+    );
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              'CASH-I',
-              style: GoogleFonts.spaceGrotesk(
-                color: primaryTextColor,
-                fontSize: widget.fontSize,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.5,
-                height: 1.0,
+        Text.rich(
+          key: const ValueKey('cashio_logo_wordmark'),
+          textHeightBehavior: const TextHeightBehavior(
+            applyHeightToFirstAscent: false,
+            applyHeightToLastDescent: false,
+          ),
+          TextSpan(
+            style: baseStyle,
+            children: [
+              const TextSpan(text: 'CASH-I'),
+              TextSpan(
+                text: 'O',
+                style: baseStyle.copyWith(color: primaryAccent),
               ),
-            ),
-            const SizedBox(width: 2.0),
-            _CenteredVaultO(
-              animation: _rotationController,
-              color: primaryAccent,
-              accentColor: tokens.accentChampagne,
-              size: oSize,
-            ),
-          ],
+            ],
+          ),
         ),
-        if (widget.showSubtitle) ...[
+        if (showSubtitle) ...[
           const SizedBox(height: 6),
           Text(
             'AIR-GAPPED ZERO-KNOWLEDGE LEDGER',
             style: GoogleFonts.mukta(
               color: tokens.textSecondary,
-              fontSize: widget.fontSize * 0.36,
+              fontSize: fontSize * 0.36,
               fontWeight: FontWeight.w700,
               letterSpacing: 1.4,
             ),

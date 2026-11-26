@@ -75,6 +75,8 @@ jobs:
           shorebird patch android \
             --release-version=latest \
             --track stable \
+            --allow-native-diffs \
+            --allow-asset-diffs \
             --dart-define="CASHIO_APP_VERSION=${APP_VER}" \
             --dart-define="CASHIO_BUILD_NUMBER=${APP_BUILD}" \
             -- --no-tree-shake-icons
