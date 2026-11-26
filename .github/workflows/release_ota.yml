@@ -79,6 +79,10 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Set up Shorebird CLI (when SHOREBIRD_TOKEN is configured)
+        if: ${{ secrets.SHOREBIRD_TOKEN != '' }}
+        uses: shorebirdtech/setup-shorebird@v1
+
       - name: Restore Persistent Android Release Signing Keystore
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -90,6 +94,7 @@ jobs:
 
       - name: Build Signed Android Release APK & Web PWA Bundle
         env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
           CASHIO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           CASHIO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           CASHIO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -97,23 +102,41 @@ jobs:
           flutter pub get
           mkdir -p dist-android
 
-          flutter build apk --release --target-platform android-arm,android-arm64 --no-tree-shake-icons \
-            --build-name="${{ needs.prepare-metadata.outputs.version }}" \
-            --build-number="${{ needs.prepare-metadata.outputs.build }}" \
-            --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
-            --dart-define="CASHIO_BUILD_NUMBER=${{ needs.prepare-metadata.outputs.build }}"
+          if [ -n "${SHOREBIRD_TOKEN:-}" ] && ! grep -q "cashio-shorebird-pending-init" shorebird.yaml; then
+            echo "Building Shorebird-enabled Android Release APK (supports silent in-app Dart/UI patches)..."
+            shorebird release android \
+              --artifact apk \
+              --target-platform android-arm,android-arm64 \
+              --flutter-version=3.47.8 \
+              --build-name="${{ needs.prepare-metadata.outputs.version }}" \
+              --build-number="${{ needs.prepare-metadata.outputs.build }}" \
+              --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
+              --dart-define="CASHIO_BUILD_NUMBER=${{ needs.prepare-metadata.outputs.build }}" \
+              -- --no-tree-shake-icons
+            cp build/app/outputs/flutter-apk/app-release.apk \
+              "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android.apk"
+            # Mirror the Shorebird-enabled mobile APK as arm64 target so OTA arm64 phones also receive Shorebird engine!
+            cp build/app/outputs/flutter-apk/app-release.apk \
+              "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android-arm64.apk"
+          else
+            flutter build apk --release --target-platform android-arm,android-arm64 --no-tree-shake-icons \
+              --build-name="${{ needs.prepare-metadata.outputs.version }}" \
+              --build-number="${{ needs.prepare-metadata.outputs.build }}" \
+              --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
+              --dart-define="CASHIO_BUILD_NUMBER=${{ needs.prepare-metadata.outputs.build }}"
 
-          cp build/app/outputs/flutter-apk/app-release.apk \
-            "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android.apk"
+            cp build/app/outputs/flutter-apk/app-release.apk \
+              "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android.apk"
 
-          CASHIO_ARM64_ONLY=true flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons \
-            --build-name="${{ needs.prepare-metadata.outputs.version }}" \
-            --build-number="${{ needs.prepare-metadata.outputs.build }}" \
-            --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
-            --dart-define="CASHIO_BUILD_NUMBER=${{ needs.prepare-metadata.outputs.build }}"
+            CASHIO_ARM64_ONLY=true flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons \
+              --build-name="${{ needs.prepare-metadata.outputs.version }}" \
+              --build-number="${{ needs.prepare-metadata.outputs.build }}" \
+              --dart-define="CASHIO_APP_VERSION=${{ needs.prepare-metadata.outputs.version }}" \
+              --dart-define="CASHIO_BUILD_NUMBER=${{ needs.prepare-metadata.outputs.build }}"
 
-          cp build/app/outputs/flutter-apk/app-release.apk \
-            "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android-arm64.apk"
+            cp build/app/outputs/flutter-apk/app-release.apk \
+              "dist-android/cashio-${{ needs.prepare-metadata.outputs.tag }}-android-arm64.apk"
+          fi
 
           # Enforce 4-byte zipalign + true v1 (JAR) + v2 + v3 signatures + persistent cert fingerprint
           ZIPALIGN_BIN=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name zipalign | sort -V | tail -n 1)

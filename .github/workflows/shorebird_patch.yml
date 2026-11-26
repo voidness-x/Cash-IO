@@ -14,7 +14,7 @@ jobs:
   shorebird-patch-android:
     name: Push Silent In-App Dart Patch (Shorebird)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout Repository
@@ -35,13 +35,50 @@ jobs:
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Set up JDK 17
+        if: steps.check_config.outputs.enabled == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
       - name: Set up Shorebird CLI
         if: steps.check_config.outputs.enabled == 'true'
         uses: shorebirdtech/setup-shorebird@v1
+
+      - name: Restore Persistent Android Release Signing Keystore
+        if: steps.check_config.outputs.enabled == 'true'
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/cashio-release.jks"
+            echo "CASHIO_KEYSTORE_PATH=$RUNNER_TEMP/cashio-release.jks" >> "$GITHUB_ENV"
+          fi
 
       - name: Push Silent Android Code-Push Patch
         if: steps.check_config.outputs.enabled == 'true'
         env:
           SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+          CASHIO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          CASHIO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          CASHIO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          shorebird patch android --no-confirm
+          # Verify at least one Shorebird Android release exists before patching
+          if ! shorebird releases list --json 2>/dev/null | grep -q '"android"'; then
+            echo "No Shorebird Android base release found yet. Tag a new release (e.g. v3.2.1) after adding SHOREBIRD_TOKEN to publish the Shorebird-enabled base APK first."
+            exit 0
+          fi
+          PUB_VER=$(grep '^version:' pubspec.yaml | awk '{print $2}')
+          APP_VER="${PUB_VER%%+*}"
+          APP_BUILD="${PUB_VER##*+}"
+          shorebird patch android \
+            --release-version=latest \
+            --track stable \
+            --dart-define="CASHIO_APP_VERSION=${APP_VER}" \
+            --dart-define="CASHIO_BUILD_NUMBER=${APP_BUILD}" \
+            -- --no-tree-shake-icons
+
+      - name: Shred Temporary Keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cashio-release.jks"
