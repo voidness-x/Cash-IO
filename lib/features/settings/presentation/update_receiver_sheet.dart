@@ -36,16 +36,49 @@ class _UpdateReceiverSheetState extends State<UpdateReceiverSheet> {
       _needsPermissionRetry = false;
     });
 
+    final patchCheck = await _service.checkForInAppPatch();
     final update = await _service.checkForUpdates(forceCheck: true);
     if (mounted) {
       setState(() {
         _isChecking = false;
         _availableUpdate = update;
-        if (update == null) {
+        if (update == null && !patchCheck.isAvailable && !patchCheck.restartRequired) {
+          final patchSuffix = patchCheck.currentPatchNumber != null
+              ? ' • Patch #${patchCheck.currentPatchNumber}'
+              : '';
           _statusFeedback =
-              'Cash-IO is up to date (v${_service.currentVersion} • Build ${_service.currentBuild}). Checked GitHub Releases.';
+              'Cash-IO is up to date (v${_service.currentVersion}$patchSuffix). Checked in-app patches & GitHub Releases.';
           _isError = false;
         }
+      });
+    }
+  }
+
+  Future<void> _applyInAppPatch() async {
+    setState(() {
+      _isApplying = true;
+      _needsPermissionRetry = false;
+      _progressValue = 0.1;
+      _progressMessage = 'Creating pre-patch vault snapshot (.cashio.bak)...';
+    });
+
+    final result = await _service.applyInAppPatch(
+      onProgress: (progress, statusText) {
+        if (mounted) {
+          setState(() {
+            _progressValue = progress;
+            _progressMessage = statusText;
+          });
+        }
+      },
+    );
+
+    if (mounted) {
+      setState(() {
+        _isApplying = false;
+        _progressMessage = null;
+        _statusFeedback = result.message;
+        _isError = !result.success;
       });
     }
   }
@@ -270,12 +303,12 @@ class _UpdateReceiverSheetState extends State<UpdateReceiverSheet> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'v${_service.currentVersion} (Build ${_service.currentBuild})',
+                          'v${_service.currentVersion} (Build ${_service.currentBuild})${_service.installedPatchNumber != null ? ' • Patch #${_service.installedPatchNumber}' : ''}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.jetBrainsMono(
                             color: tokens.textPrimary,
-                            fontSize: 14,
+                            fontSize: 13,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -336,6 +369,64 @@ class _UpdateReceiverSheetState extends State<UpdateReceiverSheet> {
                         ),
                       ),
                     ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Silent In-App Patch Deck (Shorebird Code Push — zero browser/APK download!)
+            if (_service.inAppPatchAvailable || _service.inAppPatchRestartRequired) ...[
+              SizedBox(height: tokens.space4),
+              Container(
+                padding: EdgeInsets.all(tokens.space4),
+                decoration: tokens.heroGlowDecoration(glowColor: tokens.accent),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.bolt_rounded, color: tokens.accent, size: 18),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            _service.inAppPatchRestartRequired
+                                ? 'IN-APP UPDATE READY • RESTART APP'
+                                : 'INSTANT IN-APP UPDATE AVAILABLE',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.spaceGrotesk(
+                              color: tokens.accent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _service.inAppPatchRestartRequired
+                          ? 'The latest Cash-IO patch has been downloaded inside the app. Close and reopen Cash-IO to activate it.'
+                          : 'Downloads directly inside Cash-IO without opening a browser or installing a new APK file.',
+                      style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                    ),
+                    if (_service.inAppPatchAvailable && !_isApplying) ...[
+                      SizedBox(height: tokens.space3),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 44,
+                        child: FilledButton.icon(
+                          key: const ValueKey('apply_in_app_patch_btn'),
+                          onPressed: _applyInAppPatch,
+                          icon: const Icon(Icons.auto_fix_high_rounded, size: 18),
+                          label: Text(
+                            'DOWNLOAD & APPLY PATCH IN-APP',
+                            style: GoogleFonts.spaceGrotesk(fontSize: 12, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

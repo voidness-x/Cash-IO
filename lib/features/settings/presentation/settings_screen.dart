@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../../core/theme/tokens.dart';
+import '../../../core/theme/theme_controller.dart';
 import '../../../core/theme/frosted_scaffold.dart';
 import '../../../core/storage/vault_repository.dart';
 import '../../../core/sync/google_drive_service.dart';
@@ -13,6 +14,7 @@ import '../../profile_setup/presentation/quick_financial_setup_sheet.dart';
 import '../../subscriptions/presentation/recurring_bills_sheet.dart';
 import '../../fx/presentation/fx_converter_sheet.dart';
 import '../../vaults/presentation/vault_switcher_sheet.dart';
+import 'theme_customizer_sheet.dart';
 import 'update_receiver_sheet.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -46,8 +48,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final tokens = context.tokens;
 
     return ListenableBuilder(
-      listenable: repo,
+      listenable: Listenable.merge([repo, ThemeController.instance]),
       builder: (context, _) {
+        final activePreset = ThemeController.instance.activePreset;
         return FrostedScaffold(
           appBar: AppBar(
             title: Text(
@@ -61,24 +64,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           body: ListView(
-            padding: EdgeInsets.all(tokens.space4),
+            padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space4, tokens.space4, 124),
             children: [
-              // Active Profile Card
+              // Active Profile Card (with subtle Hero Glow)
               StaggeredEntrance(
                 index: 0,
                 child: Container(
-                  decoration: BoxDecoration(
-                    color: tokens.bgSurface,
-                    borderRadius: BorderRadius.circular(tokens.radiusMd),
-                    border: Border.all(color: tokens.borderHairline),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
+                  decoration: tokens.heroGlowDecoration(),
                   padding: EdgeInsets.all(tokens.space4),
                   child: Row(
                     children: [
@@ -141,6 +133,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ],
                   ),
+                ),
+              ),
+              SizedBox(height: tokens.space5),
+
+              // Section 0: Appearance & Theme Studio
+              StaggeredEntrance(
+                index: 1,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionHeader('APPEARANCE & THEME', tokens.textSecondary),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: tokens.bgSurface,
+                        borderRadius: BorderRadius.circular(tokens.radiusMd),
+                        border: Border.all(color: tokens.borderHairline),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(tokens.radiusMd),
+                        clipBehavior: Clip.antiAlias,
+                        child: ListTile(
+                          leading: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: activePreset.accentColor.withValues(alpha: 0.18),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: activePreset.accentColor, width: 1.5),
+                            ),
+                            child: Icon(Icons.palette_rounded, color: activePreset.accentColor, size: 18),
+                          ),
+                          title: Text(
+                            'Theme & Colors',
+                            style: GoogleFonts.mukta(
+                              color: tokens.textPrimary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${activePreset.name} • Tap to pick presets or custom colors',
+                            style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                          ),
+                          trailing: Icon(Icons.chevron_right, color: tokens.textTertiary),
+                          onTap: () {
+                            showModalBottomSheet(
+                              context: context,
+                              isScrollControlled: true,
+                              backgroundColor: tokens.bgSurface,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(tokens.radiusLg)),
+                              ),
+                              builder: (ctx) => const ThemeCustomizerSheet(),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               SizedBox(height: tokens.space5),

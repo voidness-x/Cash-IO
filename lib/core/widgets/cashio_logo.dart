@@ -108,6 +108,81 @@ class _CashIOLogoState extends State<CashIOLogo> with SingleTickerProviderStateM
   }
 }
 
+/// Standalone spinning Cash-IO vault 'O' emblem reused in the raised center
+/// Dashboard button of the floating navigation bar.
+class VaultOMark extends StatefulWidget {
+  final double size;
+  final bool animate;
+  final Color? color;
+  final Color? accentColor;
+
+  const VaultOMark({
+    super.key,
+    this.size = 28.0,
+    this.animate = true,
+    this.color,
+    this.accentColor,
+  });
+
+  @override
+  State<VaultOMark> createState() => _VaultOMarkState();
+}
+
+class _VaultOMarkState extends State<VaultOMark> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 4200),
+    );
+    if (widget.animate) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
+    if (disableAnim || !widget.animate) {
+      if (_controller.isAnimating) _controller.stop();
+    } else if (!_controller.isAnimating) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant VaultOMark oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final disableAnim = MediaQuery.disableAnimationsOf(context);
+    if (widget.animate && !disableAnim && !_controller.isAnimating) {
+      _controller.repeat();
+    } else if ((!widget.animate || disableAnim) && _controller.isAnimating) {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    return _CenteredVaultO(
+      animation: _controller,
+      color: widget.color ?? tokens.accentGold,
+      accentColor: widget.accentColor ?? tokens.accentChampagne,
+      size: widget.size,
+    );
+  }
+}
+
 /// A geometrically centered circular vault ring that rotates around exact (width/2, height/2).
 class _CenteredVaultO extends StatelessWidget {
   final Animation<double> animation;

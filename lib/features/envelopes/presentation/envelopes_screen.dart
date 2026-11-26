@@ -6,6 +6,7 @@ import '../../../core/theme/frosted_scaffold.dart';
 import '../../../core/models/finance_models.dart';
 import '../../../core/storage/vault_repository.dart';
 import '../../../core/utils/currency_utils.dart';
+import '../../../core/widgets/animated_money_bar.dart';
 
 class EnvelopesScreen extends StatefulWidget {
   const EnvelopesScreen({super.key});
@@ -32,7 +33,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
         return FrostedScaffold(
           appBar: AppBar(
             title: Text(
-              'ENVELOPE BUDGETING STUDIO',
+              'MONTHLY BUDGETS',
               style: GoogleFonts.spaceGrotesk(
                 color: tokens.textPrimary,
                 fontSize: 16,
@@ -44,7 +45,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
               if (envelopes.length >= 2) ...[
                 IconButton(
                   icon: const Icon(Icons.sync_alt_rounded),
-                  tooltip: 'Move Budget Between Envelopes',
+                  tooltip: 'Move Budget Limit',
                   onPressed: () {
                     HapticFeedback.lightImpact();
                     _showQuickMoveSheet(context, envelopes, currency);
@@ -53,7 +54,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
               ],
               IconButton(
                 icon: const Icon(Icons.add_circle_outline),
-                tooltip: 'New Envelope',
+                tooltip: 'Add Monthly Budget',
                 onPressed: () {
                   HapticFeedback.lightImpact();
                   _showAddEnvelopeSheet(context, currency);
@@ -62,35 +63,15 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
             ],
           ),
           body: ListView(
-            padding: EdgeInsets.all(tokens.space4),
+            padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space4, tokens.space4, 124),
             children: [
-              // 1. Available to Assign Command Hero
+              // 1. Glowing Safe to Budget Command Hero
               StaggeredEntrance(
                 index: 0,
                 child: Container(
                   padding: EdgeInsets.all(tokens.space5),
-                  decoration: BoxDecoration(
-                    color: availableCents < 0
-                        ? tokens.statusExpense.withValues(alpha: 0.12)
-                        : tokens.bgSurface,
-                    borderRadius: BorderRadius.circular(tokens.radiusMd),
-                    border: Border.all(
-                      color: availableCents < 0
-                          ? tokens.statusExpense
-                          : (availableCents > 0
-                              ? tokens.statusIncome.withValues(alpha: 0.5)
-                              : tokens.borderHairline),
-                      width: availableCents > 0 || availableCents < 0 ? 1.5 : 1.0,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: availableCents > 0
-                            ? tokens.statusIncome.withValues(alpha: 0.15)
-                            : Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 18,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                  decoration: tokens.heroGlowDecoration(
+                    glowColor: availableCents < 0 ? tokens.statusExpense : tokens.accentGold,
                   ),
                   child: Column(
                     children: [
@@ -129,7 +110,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        'AVAILABLE TO ASSIGN',
+                                        'SAFE TO BUDGET',
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
                                         style: GoogleFonts.spaceGrotesk(
@@ -151,8 +132,8 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                                       ),
                                       child: Text(
                                         availableCents == 0
-                                            ? 'BALANCED'
-                                            : (availableCents > 0 ? 'READY' : 'DEFICIT'),
+                                            ? 'ALL PLANNED'
+                                            : (availableCents > 0 ? 'UNALLOCATED' : 'OVER LIMIT'),
                                         style: GoogleFonts.spaceGrotesk(
                                           color: availableCents < 0 ? tokens.statusExpense : tokens.statusIncome,
                                           fontSize: 9,
@@ -178,10 +159,10 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                                 ),
                                 Text(
                                   availableCents == 0
-                                      ? 'Zero-based allocation achieved • Every unit has a job'
+                                      ? 'All your cash is planned across your monthly budgets'
                                       : (availableCents > 0
-                                          ? 'Surplus funds ready to be assigned to envelopes'
-                                          : 'Overallocated! Rebalance envelopes to cover deficit'),
+                                          ? 'Cash left over that you can assign to any category below'
+                                          : 'Your budget caps exceed your cash — lower a limit to balance'),
                                   style: GoogleFonts.mukta(
                                     color: availableCents < 0 ? tokens.statusExpense : tokens.textTertiary,
                                     fontSize: 11,
@@ -200,15 +181,38 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                       SizedBox(height: tokens.space3),
                       Row(
                         children: [
-                          Expanded(child: _buildMiniStat('ASSIGNED', CurrencyUtils.format(totalAssigned, currency: currency), tokens)),
+                          Expanded(child: _buildMiniStat('BUDGETED', CurrencyUtils.format(totalAssigned, currency: currency), tokens)),
                           Container(width: 1, height: 24, color: tokens.borderSubtle),
                           Expanded(child: _buildMiniStat('SPENT', CurrencyUtils.format(totalSpent, currency: currency), tokens)),
                           Container(width: 1, height: 24, color: tokens.borderSubtle),
-                          Expanded(child: _buildMiniStat('ENVELOPES', '${envelopes.length}', tokens)),
+                          Expanded(child: _buildMiniStat('LIMITS', '${envelopes.length}', tokens)),
                         ],
                       ),
                     ],
                   ),
+                ),
+              ),
+              SizedBox(height: tokens.space3),
+
+              // Beginner-friendly 1-line explanation of Monthly Budgets
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: tokens.space3, vertical: tokens.space2),
+                decoration: BoxDecoration(
+                  color: tokens.bgSurfaceElevated.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(tokens.radiusSm),
+                  border: Border.all(color: tokens.borderSubtle),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lightbulb_outline_rounded, size: 16, color: tokens.accentGold),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Divide your money into monthly spending caps (Food, Bills, Fun). Link a budget when spending to watch bars update live.',
+                        style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 11.5, height: 1.3),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               SizedBox(height: tokens.space4),
@@ -220,18 +224,16 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: OutlinedButton.icon(
+                        child: FilledButton.icon(
                           onPressed: () => _showAddEnvelopeSheet(context, currency),
                           icon: const Icon(Icons.add, size: 16),
                           label: Text(
-                            'New Envelope',
+                            'Add Budget',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w700, fontSize: 12),
                           ),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: tokens.statusIncome,
-                            side: BorderSide(color: tokens.statusIncome.withValues(alpha: 0.5)),
+                          style: FilledButton.styleFrom(
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(tokens.radiusSm)),
                             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
                           ),
@@ -244,7 +246,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                             onPressed: () => _showQuickMoveSheet(context, envelopes, currency),
                             icon: const Icon(Icons.sync_alt_rounded, size: 16),
                             label: Text(
-                              'Move Budget',
+                              'Move Limit',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w700, fontSize: 12),
@@ -265,7 +267,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                 SizedBox(height: tokens.space4),
               ],
 
-              // 3. Envelope Cards List
+              // 3. Budget Cards List
               if (envelopes.isEmpty) ...[
                 StaggeredEntrance(
                   index: 1,
@@ -278,10 +280,10 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                     ),
                     child: Column(
                       children: [
-                        Icon(Icons.folder_open_outlined, size: 48, color: tokens.textTertiary),
+                        Icon(Icons.pie_chart_outline_rounded, size: 48, color: tokens.textTertiary),
                         SizedBox(height: tokens.space3),
                         Text(
-                          'No Budget Envelopes Created',
+                          'No Monthly Budgets Yet',
                           style: GoogleFonts.spaceGrotesk(
                             color: tokens.textPrimary,
                             fontSize: 16,
@@ -290,7 +292,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                         ),
                         SizedBox(height: tokens.space2),
                         Text(
-                          'Create budgeting envelopes like Groceries, Rent, Utilities, or Fuel to allocate your cash intentionally.',
+                          'Set simple monthly caps like Groceries, Bills, or Fun so you always know how much is safe to spend.',
                           textAlign: TextAlign.center,
                           style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 13),
                         ),
@@ -299,7 +301,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                           onPressed: () => _showAddEnvelopeSheet(context, currency),
                           icon: const Icon(Icons.add, size: 18),
                           label: Text(
-                            'Create First Envelope',
+                            'Create First Budget',
                             style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.w800),
                           ),
                           style: FilledButton.styleFrom(
@@ -327,26 +329,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                   );
                 }),
               ],
-              SizedBox(height: tokens.space10),
             ],
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _showAddEnvelopeSheet(context, currency),
-            backgroundColor: tokens.statusIncome,
-            foregroundColor: tokens.bgPrimary,
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(tokens.radiusPill),
-            ),
-            icon: const Icon(Icons.add, size: 20),
-            label: Text(
-              'NEW ENVELOPE',
-              style: GoogleFonts.spaceGrotesk(
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-                letterSpacing: 0.8,
-              ),
-            ),
           ),
         );
       },
@@ -485,19 +468,12 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
           ),
           SizedBox(height: tokens.space3),
 
-          // Two-Tone Segmented Progress Bar
-          ClipRRect(
-            borderRadius: BorderRadius.circular(tokens.radiusPill),
-            child: SizedBox(
-              height: 6,
-              child: LinearProgressIndicator(
-                value: progress,
-                backgroundColor: tokens.bgSurfaceElevated,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  isOverspent ? tokens.statusExpense : tokens.statusIncome,
-                ),
-              ),
-            ),
+          // Left-to-Right Animated Budget Progress Bar
+          AnimatedMoneyBar(
+            value: progress,
+            height: 7,
+            fillColor: isOverspent ? tokens.statusExpense : tokens.statusIncome,
+            glow: !isOverspent && progress > 0,
           ),
           SizedBox(height: tokens.space3),
 
@@ -556,7 +532,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                           Icon(Icons.add, size: 12, color: tokens.statusIncome),
                           const SizedBox(width: 4),
                           Text(
-                            'Assign',
+                            'Set Limit',
                             style: GoogleFonts.mukta(
                               color: tokens.statusIncome,
                               fontSize: 11,

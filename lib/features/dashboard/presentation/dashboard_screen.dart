@@ -9,6 +9,7 @@ import '../../../core/utils/currency_utils.dart';
 import '../../transactions/presentation/record_transaction_sheet.dart';
 import '../../receipts/presentation/receipt_viewer_dialog.dart';
 import '../../../core/widgets/cashio_logo.dart';
+import '../../../core/widgets/animated_money_bar.dart';
 import 'cash_action_sheets.dart';
 import '../../analytics/presentation/category_spending_donut_card.dart';
 import '../../subscriptions/presentation/recurring_bills_sheet.dart';
@@ -222,7 +223,7 @@ class _DashboardScreenState extends State<DashboardScreen>
           body: FadeTransition(
             opacity: _fadeAnimation,
             child: ListView(
-              padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space2, tokens.space4, 96),
+              padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space2, tokens.space4, 124),
               children: [
                 // 0A. LIVE GITHUB RELEASE UPDATE BANNER
                 if (otaService.hasUnreadUpdateBanner && otaService.availableUpdate != null) ...[
@@ -345,7 +346,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   SizedBox(height: tokens.space4),
                 ],
 
-                // 1. HERO CURRENT CASH CARD (Clean, Breathable, Zero Overflow)
+                // 1. HERO TOTAL MONEY CARD (Glowing, Breathable, Zero Overflow)
                 _buildCurrentCashDeck(
                   tokens: tokens,
                   currentCashCents: repo.totalAssetsCents,
@@ -354,6 +355,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                   totalLiabilitiesCents: repo.totalLiabilitiesCents,
                   onAddCash: () => _openAddCashSheet(context, currency),
                   onSpendCash: () => _openSpendCashSheet(context, currency),
+                  onMoveCash: () => _openMoveMoneySheet(context, currency),
                   onOpenRecurring: () => _openRecurringBillsSheet(context, currency),
                   onOpenFx: () => _openFxConverterSheet(context, currency),
                 ),
@@ -387,24 +389,6 @@ class _DashboardScreenState extends State<DashboardScreen>
               ],
             ),
           ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _openRecordTransactionSheet(context),
-            backgroundColor: tokens.accentGold,
-            foregroundColor: tokens.bgPrimary,
-            elevation: 3,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(tokens.radiusPill),
-            ),
-            icon: const Icon(Icons.add_rounded, size: 20),
-            label: Text(
-              'NEW ENTRY',
-              style: GoogleFonts.spaceGrotesk(
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
         );
       },
     );
@@ -413,8 +397,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildFocusTabSelector(CashIOThemeExtension tokens) {
     const tabs = [
       (Icons.auto_awesome_outlined, 'Insights'),
-      (Icons.savings_outlined, 'Savings Vaults'),
-      (Icons.pie_chart_outline_rounded, 'Categories'),
+      (Icons.savings_outlined, 'Savings'),
+      (Icons.pie_chart_outline_rounded, 'Breakdown'),
     ];
 
     return Container(
@@ -481,6 +465,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     required int totalLiabilitiesCents,
     required VoidCallback onAddCash,
     required VoidCallback onSpendCash,
+    required VoidCallback onMoveCash,
     required VoidCallback onOpenRecurring,
     required VoidCallback onOpenFx,
   }) {
@@ -488,10 +473,8 @@ class _DashboardScreenState extends State<DashboardScreen>
     final repo = VaultRepository.instance;
 
     return Container(
-      decoration: BoxDecoration(
-        color: tokens.bgSurface,
-        borderRadius: BorderRadius.circular(tokens.radiusMd),
-        border: Border.all(color: tokens.borderHairline, width: 1.0),
+      decoration: tokens.heroGlowDecoration(
+        glowColor: isNegative ? tokens.statusExpense : tokens.accentGold,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,7 +490,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'TOTAL AVAILABLE CASH',
+                        'TOTAL MONEY',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.spaceGrotesk(
@@ -584,30 +567,30 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 SizedBox(height: tokens.space4),
 
-                // Primary Actions (Add Cash & Spend Cash) + Compact Recurring Shortcut
+                // Clear 3-Way Primary Money Actions (+ Add, - Spend, Move) + Bills Icon
                 Row(
                   children: [
                     Expanded(
                       child: FilledButton.icon(
                         onPressed: onAddCash,
-                        icon: const Icon(Icons.add_rounded, size: 18),
+                        icon: const Icon(Icons.add_rounded, size: 17),
                         label: const Text(
-                          'Add Cash',
+                          'Add',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         style: FilledButton.styleFrom(
                           backgroundColor: tokens.statusIncome,
                           foregroundColor: tokens.bgPrimary,
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
                         ),
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: onSpendCash,
-                        icon: const Icon(Icons.remove_rounded, size: 18),
+                        icon: const Icon(Icons.remove_rounded, size: 17),
                         label: const Text(
                           'Spend',
                           maxLines: 1,
@@ -617,15 +600,34 @@ class _DashboardScreenState extends State<DashboardScreen>
                           backgroundColor: tokens.bgSurfaceElevated,
                           foregroundColor: tokens.textPrimary,
                           side: BorderSide(color: tokens.borderHairline),
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        key: const ValueKey('dashboard_move_button'),
+                        onPressed: onMoveCash,
+                        icon: Icon(Icons.swap_horiz_rounded, size: 17, color: tokens.accentGold),
+                        label: const Text(
+                          'Move',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: tokens.bgSurfaceElevated,
+                          foregroundColor: tokens.textPrimary,
+                          side: BorderSide(color: tokens.accentGold.withValues(alpha: 0.45)),
+                          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 6),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     IconButton.outlined(
                       onPressed: onOpenRecurring,
-                      tooltip: 'Recurring Bills & Subscriptions',
-                      icon: Icon(Icons.repeat_rounded, size: 19, color: tokens.accentGold),
+                      tooltip: 'Recurring Bills',
+                      icon: Icon(Icons.repeat_rounded, size: 18, color: tokens.accentGold),
                       style: IconButton.styleFrom(
                         side: BorderSide(color: tokens.borderHairline),
                         backgroundColor: tokens.bgSurfaceElevated,
@@ -640,11 +642,11 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
 
-          // Assets & Liabilities Split Footer (100% Overflow-Safe)
+          // Cash & Debts Split Footer (100% Overflow-Safe)
           Container(
             padding: EdgeInsets.symmetric(horizontal: tokens.space4, vertical: tokens.space3),
             decoration: BoxDecoration(
-              color: tokens.bgSurfaceElevated,
+              color: tokens.bgSurfaceElevated.withValues(alpha: 0.72),
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(tokens.radiusMd)),
               border: Border(top: BorderSide(color: tokens.borderSubtle)),
             ),
@@ -655,7 +657,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'ASSETS',
+                        'CASH & BANK',
                         style: GoogleFonts.spaceGrotesk(
                           color: tokens.textTertiary,
                           fontSize: 10,
@@ -685,7 +687,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'LIABILITIES',
+                        'DEBTS',
                         style: GoogleFonts.spaceGrotesk(
                           color: tokens.textTertiary,
                           fontSize: 10,
@@ -761,23 +763,12 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           ),
           const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(tokens.radiusPill),
-            child: SizedBox(
-              height: 6,
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: (incomeRatio * 100).toInt().clamp(1, 99),
-                    child: Container(color: tokens.statusIncome),
-                  ),
-                  Expanded(
-                    flex: ((1.0 - incomeRatio) * 100).toInt().clamp(1, 99),
-                    child: Container(color: tokens.statusExpense),
-                  ),
-                ],
-              ),
-            ),
+          AnimatedSegmentedMoneyBar(
+            height: 7,
+            segments: [
+              MoneyBarSegment(weight: incomeRatio.clamp(0.05, 0.95), color: tokens.statusIncome),
+              MoneyBarSegment(weight: (1.0 - incomeRatio).clamp(0.05, 0.95), color: tokens.statusExpense),
+            ],
           ),
           const SizedBox(height: 10),
           Row(
@@ -863,6 +854,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                 'Receipts ($receiptsCount)',
                 style: GoogleFonts.mukta(color: tokens.accent, fontSize: 12, fontWeight: FontWeight.w700),
               ),
+            ),
+            IconButton(
+              icon: Icon(Icons.post_add_rounded, size: 19, color: tokens.accentGold),
+              visualDensity: VisualDensity.compact,
+              tooltip: 'Custom Ledger Entry',
+              onPressed: () => _openRecordTransactionSheet(context),
             ),
             IconButton(
               icon: Icon(
@@ -1050,6 +1047,18 @@ class _DashboardScreenState extends State<DashboardScreen>
         borderRadius: BorderRadius.vertical(top: Radius.circular(context.tokens.radiusLg)),
       ),
       builder: (ctx) => SpendCashSheet(baseCurrency: currency),
+    );
+  }
+
+  void _openMoveMoneySheet(BuildContext context, String currency) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.tokens.bgPrimary,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(context.tokens.radiusLg)),
+      ),
+      builder: (ctx) => MoveMoneySheet(baseCurrency: currency),
     );
   }
 

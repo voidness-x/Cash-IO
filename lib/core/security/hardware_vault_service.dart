@@ -52,6 +52,34 @@ class HardwareVaultService {
     } catch (_) {}
   }
 
+  /// Stores a lightweight non-secret UI preference (e.g. theme preset/colors) locally.
+  Future<void> savePreference(String key, String value) async {
+    _memoryCache[key] = value;
+    try {
+      await _secureStorage
+          .write(key: key, value: value)
+          .timeout(const Duration(milliseconds: 800));
+    } catch (_) {}
+  }
+
+  /// Reads a lightweight UI preference from local storage (with instant in-memory cache).
+  Future<String?> readPreference(String key) async {
+    if (_memoryCache.containsKey(key)) {
+      return _memoryCache[key];
+    }
+    try {
+      final raw = await _secureStorage
+          .read(key: key)
+          .timeout(const Duration(milliseconds: 800));
+      if (raw != null) {
+        _memoryCache[key] = raw;
+      }
+      return raw;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Generates a cryptographically strong 256-bit salt for the profile
   String generateProfileSalt() {
     final random = Random.secure();

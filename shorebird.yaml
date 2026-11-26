@@ -1,0 +1,13 @@
+# Shorebird Code Push Configuration for Cash-IO
+# Enables silent in-app Dart/UI updates directly inside the Android APK without downloading a new APK.
+#
+# One-time setup to activate live silent patches:
+#   1. Run `shorebird login` and `shorebird init` locally to populate your unique `app_id`.
+#   2. Build your base release with `shorebird release android --artifact apk` and install once.
+#   3. Add `SHOREBIRD_TOKEN` (from `shorebird login:ci`) to GitHub Secrets so pushes to `main`
+#      automatically ship silent in-app patches via `.github/workflows/shorebird_patch.yml`.
+app_id: cashio-shorebird-pending-init
+
+# Cash-IO controls patch staging through UpdateReceiverService so an encrypted
+# `.cashio.bak` pre-update vault snapshot is always captured BEFORE applying a patch.
+auto_update: false

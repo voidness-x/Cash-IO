@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_controller.dart';
 import 'core/storage/database_helper.dart';
 import 'core/storage/vault_repository.dart';
 import 'core/security/app_privacy_shield.dart';
@@ -45,6 +46,7 @@ class _CashIOAppState extends State<CashIOApp> {
   @override
   void initState() {
     super.initState();
+    ThemeController.instance.loadSavedTheme();
     _checkInitialVault();
   }
 
@@ -89,18 +91,24 @@ class _CashIOAppState extends State<CashIOApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Cash-IO',
-      debugShowCheckedModeBanner: false,
-      theme: CashIOTheme.lightTheme,
-      darkTheme: CashIOTheme.darkTheme,
-      themeMode: ThemeMode.system, // Dynamically tracks OS dark/light mode
-      builder: (context, child) => AppPrivacyShield(child: child ?? const SizedBox.shrink()),
-      home: !_hasProfile
-          ? ProfileSetupScreen(onProfileCreated: _onProfileCreated)
-          : !_isAuthenticated
-              ? PinAuthScreen(onAuthenticated: _onAuthenticated)
-              : MainScaffold(onSwitchProfile: _onSwitchProfile),
+    return ListenableBuilder(
+      listenable: ThemeController.instance,
+      builder: (context, _) {
+        final themeCtrl = ThemeController.instance;
+        return MaterialApp(
+          title: 'Cash-IO',
+          debugShowCheckedModeBanner: false,
+          theme: CashIOTheme.buildLightTheme(themeCtrl.lightExtension),
+          darkTheme: CashIOTheme.buildDarkTheme(themeCtrl.darkExtension),
+          themeMode: themeCtrl.themeMode,
+          builder: (context, child) => AppPrivacyShield(child: child ?? const SizedBox.shrink()),
+          home: !_hasProfile
+              ? ProfileSetupScreen(onProfileCreated: _onProfileCreated)
+              : !_isAuthenticated
+                  ? PinAuthScreen(onAuthenticated: _onAuthenticated)
+                  : MainScaffold(onSwitchProfile: _onSwitchProfile),
+        );
+      },
     );
   }
 }

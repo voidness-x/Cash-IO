@@ -6,6 +6,7 @@ import '../../../core/models/finance_models.dart';
 import '../../../core/storage/vault_repository.dart';
 import '../../../core/services/financial_advisory_service.dart';
 import '../../../core/utils/currency_utils.dart';
+import '../../../core/widgets/animated_money_bar.dart';
 import 'savings_goal_sheets.dart';
 
 /// Interactive Goal Vaults deck & Spare-Change Round-Up Simulator (100% Flex Overflow Safe)
@@ -238,16 +239,11 @@ class SavingsGoalsDeck extends StatelessWidget {
                     ],
                   ),
                   SizedBox(height: tokens.space3),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(tokens.radiusPill),
-                    child: SizedBox(
-                      height: 6,
-                      child: LinearProgressIndicator(
-                        value: progress,
-                        backgroundColor: tokens.bgSurfaceElevated,
-                        valueColor: AlwaysStoppedAnimation<Color>(tokens.statusIncome),
-                      ),
-                    ),
+                  AnimatedMoneyBar(
+                    value: progress,
+                    height: 7,
+                    fillColor: tokens.statusIncome,
+                    glow: isFullyFunded,
                   ),
                   SizedBox(height: tokens.space2),
                   Row(

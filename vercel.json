@@ -1,0 +1,27 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "buildCommand": "bash scripts/vercel_build.sh",
+  "outputDirectory": "build/web",
+  "headers": [
+    {
+      "source": "/sqlite3.wasm",
+      "headers": [
+        { "key": "Content-Type", "value": "application/wasm" },
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        { "key": "Permissions-Policy", "value": "geolocation=(), microphone=(), camera=(self)" }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/((?!assets/|canvaskit/|icons/|sqlite3\\.wasm|sqflite_sw\\.js|flutter_bootstrap\\.js|flutter_service_worker\\.js|main\\.dart\\.js|manifest\\.json|favicon\\.png).*)", "destination": "/index.html" }
+  ]
+}

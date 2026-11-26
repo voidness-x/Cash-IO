@@ -5,6 +5,7 @@ import '../../../core/theme/tokens.dart';
 import '../../../core/storage/vault_repository.dart';
 import '../../../core/services/financial_advisory_service.dart';
 import '../../../core/utils/currency_utils.dart';
+import '../../../core/widgets/animated_money_bar.dart';
 
 /// Privacy-first on-device financial advisory and heuristics intelligence card
 class FinancialAdvisoryCard extends StatelessWidget {
@@ -51,7 +52,7 @@ class FinancialAdvisoryCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'FINANCIAL GUIDANCE',
+                  'MONEY HEALTH',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.spaceGrotesk(
@@ -81,31 +82,19 @@ class FinancialAdvisoryCard extends StatelessWidget {
           ),
           SizedBox(height: tokens.space3),
 
-          // 50/30/20 Segmented Bar + Wrap Legend (Never Overflows on Small Phones)
-          ClipRRect(
-            borderRadius: BorderRadius.circular(tokens.radiusPill),
-            child: SizedBox(
-              height: 6,
-              child: Row(
-                children: [
-                  if (needsPct > 0)
-                    Expanded(
-                      flex: needsPct,
-                      child: Container(color: tokens.statusIncome),
-                    ),
-                  if (wantsPct > 0)
-                    Expanded(
-                      flex: wantsPct,
-                      child: Container(color: tokens.statusExpense.withValues(alpha: 0.85)),
-                    ),
-                  if (savingsPct > 0 || (needsPct == 0 && wantsPct == 0))
-                    Expanded(
-                      flex: savingsPct > 0 ? savingsPct : 100,
-                      child: Container(color: tokens.accentGold),
-                    ),
-                ],
-              ),
-            ),
+          // 50/30/20 Left-to-Right Animated Bar + Wrap Legend
+          AnimatedSegmentedMoneyBar(
+            height: 7,
+            segments: [
+              if (needsPct > 0) MoneyBarSegment(weight: needsPct.toDouble(), color: tokens.statusIncome),
+              if (wantsPct > 0)
+                MoneyBarSegment(weight: wantsPct.toDouble(), color: tokens.statusExpense.withValues(alpha: 0.85)),
+              if (savingsPct > 0 || (needsPct == 0 && wantsPct == 0))
+                MoneyBarSegment(
+                  weight: (savingsPct > 0 ? savingsPct : 100).toDouble(),
+                  color: tokens.accentGold,
+                ),
+            ],
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -141,7 +130,7 @@ class FinancialAdvisoryCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'Runway: ${runway.runwayMonths.toStringAsFixed(1)} mo (${runway.tier.name.toUpperCase()})',
+                    'Safety Buffer: ${runway.runwayMonths.toStringAsFixed(1)} mo (${runway.tier.name.toUpperCase()})',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.mukta(

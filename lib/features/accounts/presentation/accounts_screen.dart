@@ -6,6 +6,7 @@ import '../../../core/theme/frosted_scaffold.dart';
 import '../../../core/models/finance_models.dart';
 import '../../../core/storage/vault_repository.dart';
 import '../../../core/utils/currency_utils.dart';
+import '../../../core/widgets/animated_money_bar.dart';
 
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
@@ -39,7 +40,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
         return FrostedScaffold(
           appBar: AppBar(
             title: Text(
-              'CHART OF ACCOUNTS',
+              'WALLETS',
               style: GoogleFonts.spaceGrotesk(
                 color: tokens.textPrimary,
                 fontSize: 16,
@@ -50,7 +51,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
             actions: [
               IconButton(
                 icon: const Icon(Icons.swap_horiz_rounded),
-                tooltip: 'Transfer Funds',
+                tooltip: 'Move Money',
                 onPressed: assetAccounts.length >= 2
                     ? () {
                         HapticFeedback.lightImpact();
@@ -60,7 +61,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               ),
               IconButton(
                 icon: const Icon(Icons.add_circle_outline),
-                tooltip: 'Add Account',
+                tooltip: 'Add Wallet',
                 onPressed: () {
                   HapticFeedback.lightImpact();
                   _showAddAccountSheet(context, currency);
@@ -69,24 +70,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
             ],
           ),
           body: ListView(
-            padding: EdgeInsets.all(tokens.space4),
+            padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space4, tokens.space4, 124),
             children: [
-              // 1. Financial Position Summary Deck
+              // 1. Glowing Financial Position Summary Deck
               StaggeredEntrance(
                 index: 0,
                 child: Container(
                   padding: EdgeInsets.all(tokens.space5),
-                  decoration: BoxDecoration(
-                    color: tokens.bgSurface,
-                    borderRadius: BorderRadius.circular(tokens.radiusMd),
-                    border: Border.all(color: tokens.borderHairline),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                  decoration: tokens.heroGlowDecoration(
+                    glowColor: netWorth >= 0 ? tokens.accentGold : tokens.statusExpense,
                   ),
                   child: Column(
                     children: [
@@ -94,7 +86,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                         children: [
                           Expanded(
                             child: _buildSummaryColumn(
-                              'ASSETS',
+                              'CASH & BANK',
                               CurrencyUtils.format(totalAssets, currency: currency),
                               tokens.statusIncome,
                               tokens.textSecondary,
@@ -104,7 +96,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           Container(width: 1, height: 42, color: tokens.borderSubtle),
                           Expanded(
                             child: _buildSummaryColumn(
-                              'LIABILITIES',
+                              'DEBTS',
                               CurrencyUtils.format(totalLiabilities, currency: currency),
                               tokens.statusExpense,
                               tokens.textSecondary,
@@ -123,54 +115,53 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           ),
                         ],
                       ),
-                      if (assetAccounts.length >= 2) ...[
-                        SizedBox(height: tokens.space4),
-                        Divider(color: tokens.borderSubtle, height: 1),
-                        SizedBox(height: tokens.space3),
-                        InkWell(
-                          onTap: () => _showTransferSheet(context, assetAccounts, currency),
-                          borderRadius: BorderRadius.circular(tokens.radiusSm),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.sync_alt_rounded, size: 16, color: tokens.accentGold),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    'Transfer Between Accounts',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.spaceGrotesk(
-                                      color: tokens.accentGold,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                      SizedBox(height: tokens.space4),
+                      Divider(color: tokens.borderSubtle, height: 1),
+                      SizedBox(height: tokens.space3),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: () => _showAddAccountSheet(context, currency),
+                              icon: const Icon(Icons.add_rounded, size: 16),
+                              label: const Text('Add Wallet', maxLines: 1, overflow: TextOverflow.ellipsis),
+                              style: FilledButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                          if (assetAccounts.length >= 2) ...[
+                            SizedBox(width: tokens.space2),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _showTransferSheet(context, assetAccounts, currency),
+                                icon: Icon(Icons.sync_alt_rounded, size: 16, color: tokens.accentGold),
+                                label: const Text('Move Money', maxLines: 1, overflow: TextOverflow.ellipsis),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: tokens.accentGold.withValues(alpha: 0.45)),
+                                  padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
                 ),
               ),
               SizedBox(height: tokens.space4),
 
-              // 2. Interactive Filter Bar
+              // 2. Interactive Filter Bar (Clean Wallets first, Accounting Categories optional)
               StaggeredEntrance(
                 index: 1,
                 child: SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      _buildFilterChip('All (${allAccounts.length})', null, tokens),
-                      _buildFilterChip('Assets (${assetAccounts.length})', AccountType.asset, tokens),
-                      _buildFilterChip('Liabilities (${liabilityAccounts.length})', AccountType.liability, tokens),
+                      _buildFilterChip('My Wallets (${assetAccounts.length + liabilityAccounts.length})', null, tokens),
+                      _buildFilterChip('Cash & Bank (${assetAccounts.length})', AccountType.asset, tokens),
+                      _buildFilterChip('Debts (${liabilityAccounts.length})', AccountType.liability, tokens),
                       _buildFilterChip('Income (${incomeAccounts.length})', AccountType.income, tokens),
                       _buildFilterChip('Expenses (${expenseAccounts.length})', AccountType.expense, tokens),
                     ],
@@ -179,13 +170,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
               ),
               SizedBox(height: tokens.space4),
 
-              // 3. Categorized / Grouped Accounts List
+              // 3. Categorized / Grouped Wallets List (Default shows real Wallets + Debts cleanly)
               if (_selectedFilter == null) ...[
-                // All Accounts - Grouped by Category
                 if (assetAccounts.isNotEmpty)
                   _buildAccountSection(
-                    title: 'LIQUID ASSETS',
-                    subtitle: 'Cash, bank balances, and store of value',
+                    title: 'CASH & BANK WALLETS',
+                    subtitle: 'Money you own across cash, bank, and cards',
                     accounts: assetAccounts,
                     totalGroupCents: totalAssets,
                     tokens: tokens,
@@ -196,34 +186,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
                 if (liabilityAccounts.isNotEmpty)
                   _buildAccountSection(
-                    title: 'LIABILITIES & DEBT',
-                    subtitle: 'Credit lines, loans, and payable obligations',
+                    title: 'DEBTS & CREDIT',
+                    subtitle: 'Credit cards, loans, and amounts you owe',
                     accounts: liabilityAccounts,
                     totalGroupCents: totalLiabilities,
                     tokens: tokens,
                     startIndex: 2 + assetAccounts.length,
-                    showPercentage: false,
-                  ),
-
-                if (incomeAccounts.isNotEmpty)
-                  _buildAccountSection(
-                    title: 'INCOME SOURCES',
-                    subtitle: 'Categories of inflows & deposits',
-                    accounts: incomeAccounts,
-                    totalGroupCents: 0,
-                    tokens: tokens,
-                    startIndex: 2 + assetAccounts.length + liabilityAccounts.length,
-                    showPercentage: false,
-                  ),
-
-                if (expenseAccounts.isNotEmpty)
-                  _buildAccountSection(
-                    title: 'OPERATING EXPENSES',
-                    subtitle: 'Categories of outflows & purchases',
-                    accounts: expenseAccounts,
-                    totalGroupCents: 0,
-                    tokens: tokens,
-                    startIndex: 2 + assetAccounts.length + liabilityAccounts.length + incomeAccounts.length,
                     showPercentage: false,
                   ),
               ] else ...[
@@ -236,26 +204,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   currency: currency,
                 ),
               ],
-              SizedBox(height: tokens.space10),
             ],
-          ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => _showAddAccountSheet(context, currency),
-            backgroundColor: tokens.statusIncome,
-            foregroundColor: tokens.bgPrimary,
-            elevation: 4,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(tokens.radiusPill),
-            ),
-            icon: const Icon(Icons.add, size: 20),
-            label: Text(
-              'NEW ACCOUNT',
-              style: GoogleFonts.spaceGrotesk(
-                fontWeight: FontWeight.w800,
-                fontSize: 12,
-                letterSpacing: 0.8,
-              ),
-            ),
           ),
         );
       },
@@ -556,17 +505,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
           if (percentage != null && percentage > 0) ...[
             Padding(
               padding: EdgeInsets.symmetric(horizontal: tokens.space4),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(tokens.radiusPill),
-                child: LinearProgressIndicator(
-                  value: percentage,
-                  minHeight: 3,
-                  backgroundColor: tokens.bgSurfaceElevated,
-                  valueColor: AlwaysStoppedAnimation<Color>(tokens.statusIncome),
-                ),
+              child: AnimatedMoneyBar(
+                value: percentage,
+                height: 5,
+                fillColor: tokens.statusIncome,
+                glow: true,
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 10),
           ],
         ],
       ),

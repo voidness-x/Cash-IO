@@ -14,7 +14,39 @@ class CashIOThemeExtension extends ThemeExtension<CashIOThemeExtension> {
   final Color bgSurfaceGlass;
 
   Color get bgCanvas => bgPrimary;
-  Color get accent => const Color(0xFF00ABB3);
+  Color get accent => accentGold;
+
+  /// Signature luminous glow decoration shared by hero money cards across
+  /// Dashboard, Wallets, Monthly Budgets, and Money Forecast.
+  BoxDecoration heroGlowDecoration({
+    Color? glowColor,
+    double? borderRadius,
+  }) {
+    final color = glowColor ?? accentGold;
+    return BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color.alphaBlend(color.withValues(alpha: 0.14), bgSurface),
+          bgSurface,
+        ],
+      ),
+      borderRadius: BorderRadius.circular(borderRadius ?? radiusMd),
+      border: Border.all(
+        color: color.withValues(alpha: 0.55),
+        width: 1.2,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: color.withValues(alpha: 0.22),
+          blurRadius: 20,
+          spreadRadius: 0,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
+  }
 
   // ---------------------------------------------------------------------------
   // ARCHITECTURAL BORDERS

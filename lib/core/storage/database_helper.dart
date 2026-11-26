@@ -359,6 +359,16 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> updateEnvelopeSpent(String envelopeId, int newSpentCents) async {
+    final db = await database;
+    await db.update(
+      'envelopes',
+      {'spent_cents': newSpentCents},
+      where: 'id = ?',
+      whereArgs: [envelopeId],
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // CRDT Event Queries
   // ---------------------------------------------------------------------------

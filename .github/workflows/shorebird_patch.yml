@@ -1,0 +1,47 @@
+name: Shorebird — Silent In-App Android Patch
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/**'
+      - 'assets/**'
+      - 'pubspec.yaml'
+  workflow_dispatch:
+
+jobs:
+  shorebird-patch-android:
+    name: Push Silent In-App Dart Patch (Shorebird)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+
+      - name: Check Shorebird Activation
+        id: check_config
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          if [ -z "$SHOREBIRD_TOKEN" ]; then
+            echo "SHOREBIRD_TOKEN secret not configured yet — skipping silent patch safely."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          elif grep -q "cashio-shorebird-pending-init" shorebird.yaml; then
+            echo "shorebird.yaml still has placeholder app_id — run 'shorebird init' once to activate."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Shorebird CLI
+        if: steps.check_config.outputs.enabled == 'true'
+        uses: shorebirdtech/setup-shorebird@v1
+
+      - name: Push Silent Android Code-Push Patch
+        if: steps.check_config.outputs.enabled == 'true'
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          shorebird patch android --no-confirm

@@ -45,10 +45,12 @@ class VaultRepository extends ChangeNotifier {
     return '${prefix}_${DateTime.now().microsecondsSinceEpoch}_$_idCounter';
   }
 
+  static const String _placeholderProfileId = 'default_profile';
+
   final Map<String, _VaultSnapshot> _inMemoryVaultSnapshots = {};
 
   void _snapshotCurrentVault() {
-    if (_profileId.isEmpty) return;
+    if (_profileId.isEmpty || _profileId == _placeholderProfileId) return;
     _inMemoryVaultSnapshots[_profileId] = _VaultSnapshot(
       name: _profileName,
       currency: _baseCurrency,
@@ -357,12 +359,14 @@ class VaultRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Lists all known profiles in the database or active profile fallback
+  /// Lists all known real user profiles in the database or active profile fallback,
+  /// filtering out the uninitialized placeholder `default_profile` so users never see an un-openable ghost vault.
   Future<List<Map<String, dynamic>>> getAvailableProfiles() async {
     _snapshotCurrentVault();
     final Map<String, Map<String, dynamic>> combined = {};
 
     for (final entry in _inMemoryVaultSnapshots.entries) {
+      if (entry.key == _placeholderProfileId) continue;
       combined[entry.key] = {
         'id': entry.key,
         'name': entry.value.name,
@@ -374,19 +378,24 @@ class VaultRepository extends ChangeNotifier {
       final dbList = await DatabaseHelper.instance.getAllProfiles().timeout(const Duration(seconds: 2));
       for (final p in dbList) {
         final id = p['id'] as String;
+        if (id == _placeholderProfileId) continue;
         combined[id] = p;
       }
     } catch (_) {}
 
     if (combined.isNotEmpty) return combined.values.toList();
 
-    return [
-      {
-        'id': _profileId,
-        'name': _profileName,
-        'currency': _baseCurrency,
-      }
-    ];
+    if (_profileId.isNotEmpty && _profileId != _placeholderProfileId) {
+      return [
+        {
+          'id': _profileId,
+          'name': _profileName,
+          'currency': _baseCurrency,
+        }
+      ];
+    }
+
+    return const [];
   }
 
   /// Switches active vault after verifying PIN against hardware keystore
@@ -859,6 +868,27 @@ class VaultRepository extends ChangeNotifier {
         GoogleDriveService.instance.scheduleDebouncedSync();
       } catch (_) {}
     }
+  }
+
+  Future<void> recordEnvelopeSpend(String envelopeId, int spentCents) async {
+    if (spentCents <= 0) return;
+    final index = _envelopes.indexWhere((e) => e.id == envelopeId);
+    if (index == -1) return;
+
+    final env = _envelopes[index];
+    final newSpent = env.spentCents + spentCents;
+    _envelopes[index] = env.copyWith(spentCents: newSpent);
+    _snapshotCurrentVault();
+    notifyListeners();
+
+    try {
+      await DatabaseHelper.instance.updateEnvelopeSpent(envelopeId, newSpent).timeout(const Duration(seconds: 2));
+    } catch (e) {
+      debugPrint('Persistence notice (updateEnvelopeSpent): $e');
+    }
+    try {
+      GoogleDriveService.instance.scheduleDebouncedSync();
+    } catch (_) {}
   }
 
   Future<void> reallocateBudget({

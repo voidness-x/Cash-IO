@@ -435,6 +435,7 @@ class _SpendCashSheetState extends State<SpendCashSheet> {
   final _noteController = TextEditingController();
   String _selectedCategory = 'Food & Dining';
   String? _selectedAssetAccountId;
+  String? _selectedBudgetId;
 
   final List<String> _categories = [
     'Food & Dining',
@@ -543,6 +544,10 @@ class _SpendCashSheetState extends State<SpendCashSheet> {
         ],
         note: 'Category: $_selectedCategory',
       );
+
+      if (success && _selectedBudgetId != null) {
+        await repo.recordEnvelopeSpend(_selectedBudgetId!, cents);
+      }
 
       if (mounted) {
         if (success) {
@@ -714,9 +719,9 @@ class _SpendCashSheetState extends State<SpendCashSheet> {
             ),
             SizedBox(height: tokens.space4),
 
-            // Pay From Account Selector
+            // Pay From Wallet Selector
             Text(
-              'PAY FROM ACCOUNT',
+              'PAY FROM WALLET',
               style: GoogleFonts.spaceGrotesk(
                 color: tokens.textSecondary,
                 fontSize: 11,
@@ -790,6 +795,58 @@ class _SpendCashSheetState extends State<SpendCashSheet> {
             ),
             SizedBox(height: tokens.space4),
 
+            // Optional Monthly Budget Link (Updates Budget progress bars automatically)
+            if (repo.envelopes.isNotEmpty) ...[
+              Text(
+                'COUNT TOWARD MONTHLY BUDGET (OPTIONAL)',
+                style: GoogleFonts.spaceGrotesk(
+                  color: tokens.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              SizedBox(height: tokens.space2),
+              Wrap(
+                spacing: tokens.space2,
+                runSpacing: tokens.space2,
+                children: [
+                  ChoiceChip(
+                    label: const Text('None'),
+                    selected: _selectedBudgetId == null,
+                    onSelected: (_) => setState(() => _selectedBudgetId = null),
+                    selectedColor: tokens.accentGoldBg,
+                    backgroundColor: tokens.bgSurface,
+                    labelStyle: GoogleFonts.mukta(
+                      color: _selectedBudgetId == null ? tokens.accentGold : tokens.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    side: BorderSide(
+                      color: _selectedBudgetId == null ? tokens.accentGold : tokens.borderHairline,
+                    ),
+                  ),
+                  ...repo.envelopes.map((env) {
+                    final isSelected = _selectedBudgetId == env.id;
+                    return ChoiceChip(
+                      label: Text(env.name),
+                      selected: isSelected,
+                      onSelected: (val) => setState(() => _selectedBudgetId = val ? env.id : null),
+                      selectedColor: tokens.accentGoldBg,
+                      backgroundColor: tokens.bgSurface,
+                      labelStyle: GoogleFonts.mukta(
+                        color: isSelected ? tokens.accentGold : tokens.textPrimary,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      ),
+                      side: BorderSide(
+                        color: isSelected ? tokens.accentGold : tokens.borderHairline,
+                      ),
+                    );
+                  }),
+                ],
+              ),
+              SizedBox(height: tokens.space4),
+            ],
+
             // Note Field
             TextField(
               controller: _noteController,
@@ -826,6 +883,364 @@ class _SpendCashSheetState extends State<SpendCashSheet> {
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Intuitive 1-screen sheet to move money between wallets (e.g. Bank -> Cash Wallet).
+class MoveMoneySheet extends StatefulWidget {
+  final String baseCurrency;
+  final String? initialFromId;
+
+  const MoveMoneySheet({
+    super.key,
+    required this.baseCurrency,
+    this.initialFromId,
+  });
+
+  @override
+  State<MoveMoneySheet> createState() => _MoveMoneySheetState();
+}
+
+class _MoveMoneySheetState extends State<MoveMoneySheet> {
+  final _amountController = TextEditingController();
+  final _noteController = TextEditingController();
+  String? _fromWalletId;
+  String? _toWalletId;
+
+  List<int> get _quickIncrements =>
+      widget.baseCurrency == 'IQD' ? const [10000, 25000, 50000, 100000] : const [20, 50, 100, 500];
+
+  @override
+  void initState() {
+    super.initState();
+    final wallets = VaultRepository.instance.accounts
+        .where((a) => a.type == AccountType.asset)
+        .toList();
+    if (wallets.isNotEmpty) {
+      _fromWalletId = widget.initialFromId ?? wallets.first.id;
+      final other = wallets.where((w) => w.id != _fromWalletId).firstOrNull;
+      _toWalletId = other?.id;
+    }
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  void _addQuickAmount(int amount) {
+    HapticFeedback.selectionClick();
+    final current = double.tryParse(_amountController.text.trim()) ?? 0;
+    final updated = current + amount;
+    _amountController.text = updated % 1 == 0 ? updated.toInt().toString() : updated.toStringAsFixed(2);
+  }
+
+  Future<void> _handleMove() async {
+    final cents = CurrencyUtils.parseToCents(_amountController.text.trim());
+    if (cents <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter an amount greater than zero.')),
+      );
+      return;
+    }
+
+    final repo = VaultRepository.instance;
+    final wallets = repo.accounts.where((a) => a.type == AccountType.asset).toList();
+    final fromWallet = wallets.where((w) => w.id == _fromWalletId).firstOrNull;
+    final toWallet = wallets.where((w) => w.id == _toWalletId).firstOrNull;
+
+    if (fromWallet == null || toWallet == null || fromWallet.id == toWallet.id) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pick two different wallets to move money between.')),
+      );
+      return;
+    }
+
+    HapticFeedback.mediumImpact();
+    final note = _noteController.text.trim();
+    final desc = note.isNotEmpty ? note : 'Moved: ${fromWallet.name} -> ${toWallet.name}';
+
+    final success = await repo.recordTransaction(
+      description: desc,
+      postings: [
+        PostingModel(accountId: toWallet.id, amountCents: cents),
+        PostingModel(accountId: fromWallet.id, amountCents: -cents),
+      ],
+      note: 'Wallet Transfer',
+    );
+
+    if (mounted && success) {
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Moved ${CurrencyUtils.format(cents, currency: widget.baseCurrency)} from ${fromWallet.name} to ${toWallet.name}',
+            style: GoogleFonts.mukta(fontWeight: FontWeight.w600),
+          ),
+          backgroundColor: context.tokens.statusIncome,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final wallets = VaultRepository.instance.accounts
+        .where((a) => a.type == AccountType.asset)
+        .toList();
+
+    return Padding(
+      padding: EdgeInsets.only(
+        left: tokens.space5,
+        right: tokens.space5,
+        top: tokens.space5,
+        bottom: MediaQuery.of(context).viewInsets.bottom + tokens.space6,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: EdgeInsets.all(tokens.space2),
+                  decoration: BoxDecoration(
+                    color: tokens.accentGoldBg,
+                    borderRadius: BorderRadius.circular(tokens.radiusSm),
+                  ),
+                  child: Icon(Icons.swap_horiz_rounded, color: tokens.accentGold, size: 22),
+                ),
+                SizedBox(width: tokens.space3),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'MOVE MONEY',
+                        style: GoogleFonts.spaceGrotesk(
+                          color: tokens.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.0,
+                        ),
+                      ),
+                      Text(
+                        'Transfer cash cleanly between your wallets',
+                        style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: Icon(Icons.close, color: tokens.textSecondary, size: 20),
+                  onPressed: () {
+                    if (Navigator.canPop(context)) Navigator.pop(context);
+                  },
+                ),
+              ],
+            ),
+            SizedBox(height: tokens.space4),
+
+            if (wallets.length < 2) ...[
+              Container(
+                padding: EdgeInsets.all(tokens.space4),
+                decoration: BoxDecoration(
+                  color: tokens.bgSurfaceElevated,
+                  borderRadius: BorderRadius.circular(tokens.radiusMd),
+                  border: Border.all(color: tokens.borderHairline),
+                ),
+                child: Text(
+                  'Add a second wallet (like Bank Account or Savings) in the Wallets tab to move money between them.',
+                  style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 13),
+                ),
+              ),
+            ] else ...[
+              // Amount Box
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: tokens.space4, vertical: tokens.space2),
+                decoration: BoxDecoration(
+                  color: tokens.bgSurfaceElevated,
+                  borderRadius: BorderRadius.circular(tokens.radiusMd),
+                  border: Border.all(color: tokens.accentGold.withValues(alpha: 0.45), width: 1.5),
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      widget.baseCurrency,
+                      style: GoogleFonts.spaceGrotesk(
+                        color: tokens.accentGold,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    SizedBox(width: tokens.space3),
+                    Expanded(
+                      child: TextField(
+                        controller: _amountController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: GoogleFonts.jetBrainsMono(
+                          color: tokens.textPrimary,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: '0.00',
+                          hintStyle: GoogleFonts.jetBrainsMono(
+                            color: tokens.textTertiary,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          border: InputBorder.none,
+                          isDense: true,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: tokens.space3),
+              Wrap(
+                spacing: tokens.space2,
+                runSpacing: tokens.space2,
+                children: _quickIncrements.map((inc) {
+                  final label = inc >= 1000 ? '+${(inc / 1000).toStringAsFixed(0)}K' : '+$inc';
+                  return InkWell(
+                    onTap: () => _addQuickAmount(inc),
+                    borderRadius: BorderRadius.circular(tokens.radiusSm),
+                    child: Container(
+                      padding: EdgeInsets.symmetric(horizontal: tokens.space3, vertical: tokens.space1),
+                      decoration: BoxDecoration(
+                        color: tokens.bgSurface,
+                        borderRadius: BorderRadius.circular(tokens.radiusSm),
+                        border: Border.all(color: tokens.borderHairline),
+                      ),
+                      child: Text(
+                        label,
+                        style: GoogleFonts.jetBrainsMono(
+                          color: tokens.accentGold,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              SizedBox(height: tokens.space4),
+
+              Text(
+                'FROM WALLET',
+                style: GoogleFonts.spaceGrotesk(
+                  color: tokens.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              SizedBox(height: tokens.space2),
+              Wrap(
+                spacing: tokens.space2,
+                runSpacing: tokens.space2,
+                children: wallets.map((w) {
+                  final isSelected = w.id == _fromWalletId;
+                  return ChoiceChip(
+                    label: Text('${w.name} (${CurrencyUtils.format(w.balanceCents, currency: w.currency)})'),
+                    selected: isSelected,
+                    onSelected: (val) {
+                      if (val) {
+                        setState(() {
+                          _fromWalletId = w.id;
+                          if (_toWalletId == w.id) {
+                            _toWalletId = wallets.firstWhere((other) => other.id != w.id).id;
+                          }
+                        });
+                      }
+                    },
+                    selectedColor: tokens.accentGoldBg,
+                    backgroundColor: tokens.bgSurface,
+                    labelStyle: GoogleFonts.mukta(
+                      color: isSelected ? tokens.accentGold : tokens.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    side: BorderSide(color: isSelected ? tokens.accentGold : tokens.borderHairline),
+                  );
+                }).toList(),
+              ),
+              SizedBox(height: tokens.space4),
+
+              Text(
+                'TO WALLET',
+                style: GoogleFonts.spaceGrotesk(
+                  color: tokens.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              SizedBox(height: tokens.space2),
+              Wrap(
+                spacing: tokens.space2,
+                runSpacing: tokens.space2,
+                children: wallets.where((w) => w.id != _fromWalletId).map((w) {
+                  final isSelected = w.id == _toWalletId;
+                  return ChoiceChip(
+                    label: Text('${w.name} (${CurrencyUtils.format(w.balanceCents, currency: w.currency)})'),
+                    selected: isSelected,
+                    onSelected: (val) {
+                      if (val) setState(() => _toWalletId = w.id);
+                    },
+                    selectedColor: tokens.statusIncomeBg,
+                    backgroundColor: tokens.bgSurface,
+                    labelStyle: GoogleFonts.mukta(
+                      color: isSelected ? tokens.statusIncome : tokens.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    side: BorderSide(color: isSelected ? tokens.statusIncome : tokens.borderHairline),
+                  );
+                }).toList(),
+              ),
+              SizedBox(height: tokens.space4),
+
+              TextField(
+                controller: _noteController,
+                decoration: InputDecoration(
+                  labelText: 'Note (Optional)',
+                  hintText: 'e.g. ATM withdrawal, moving to savings',
+                  prefixIcon: const Icon(Icons.edit_note, size: 20),
+                  fillColor: tokens.bgSurface,
+                ),
+              ),
+              SizedBox(height: tokens.space5),
+
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton.icon(
+                  onPressed: _handleMove,
+                  icon: const Icon(Icons.swap_horiz_rounded, size: 20),
+                  label: Text(
+                    'CONFIRM MOVE',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 13,
+                      letterSpacing: 1.0,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

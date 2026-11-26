@@ -60,7 +60,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
         return FrostedScaffold(
           appBar: AppBar(
             title: Text(
-              'CASHFLOW FORECASTING',
+              'MONEY FORECAST',
               style: GoogleFonts.spaceGrotesk(
                 color: tokens.textPrimary,
                 fontSize: 16,
@@ -70,23 +70,14 @@ class _ForecastScreenState extends State<ForecastScreen> {
             ),
           ),
           body: ListView(
-            padding: EdgeInsets.all(tokens.space4),
+            padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space4, tokens.space4, 124),
             children: [
-              // 1. Runway Summary Deck
+              // 1. Glowing Safety Buffer Hero Deck
               StaggeredEntrance(
                 index: 0,
                 child: Container(
-                  decoration: BoxDecoration(
-                    color: tokens.bgSurface,
-                    borderRadius: BorderRadius.circular(tokens.radiusMd),
-                    border: Border.all(color: tokens.borderHairline),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.25),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                  decoration: tokens.heroGlowDecoration(
+                    glowColor: netDailyCents >= 0 ? tokens.accentGold : tokens.statusExpense,
                   ),
                   padding: EdgeInsets.all(tokens.space5),
                   child: Column(
@@ -98,7 +89,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              'PROJECTED RUNWAY',
+                              'SAFETY BUFFER',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.spaceGrotesk(
@@ -118,7 +109,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
                               border: Border.all(color: tokens.statusIncome.withValues(alpha: 0.35)),
                             ),
                             child: Text(
-                              'Local Regression',
+                              'Local Estimate',
                               style: GoogleFonts.mukta(
                                 color: tokens.statusIncome,
                                 fontSize: 10,
@@ -166,7 +157,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Daily Burn Rate',
+                                  'Daily Spending',
                                   style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11, fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 2),
@@ -192,7 +183,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Net Daily Flow',
+                                  'Daily Net Change',
                                   style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11, fontWeight: FontWeight.w600),
                                 ),
                                 const SizedBox(height: 2),
@@ -236,7 +227,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              'INTERACTIVE RUNWAY SCRUBBER',
+                              'FUTURE BALANCE TIMELINE',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.spaceGrotesk(
@@ -372,7 +363,7 @@ class _ForecastScreenState extends State<ForecastScreen> {
               StaggeredEntrance(
                 index: 2,
                 child: Text(
-                  'MILESTONE RUNWAY TARGETS',
+                  'UPCOMING MILESTONES',
                   style: GoogleFonts.spaceGrotesk(
                     color: tokens.textSecondary,
                     fontSize: 11,

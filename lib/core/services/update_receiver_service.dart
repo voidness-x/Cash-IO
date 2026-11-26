@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import '../storage/vault_repository.dart';
 import '../sync/e2ee_packager.dart';
+import 'in_app_patch_driver.dart';
 import 'ota_network_stub.dart' if (dart.library.io) 'ota_network_io.dart';
 import 'ota_platform_bridge.dart';
 
@@ -266,6 +267,7 @@ class UpdateApplyResult {
   final bool wasRolledBack;
   final bool needsInstallPermission;
   final bool launchedSystemInstaller;
+  final bool restartRequired;
   final String message;
   final EmergencyRollbackSnapshot? snapshot;
 
@@ -274,6 +276,7 @@ class UpdateApplyResult {
     this.wasRolledBack = false,
     this.needsInstallPermission = false,
     this.launchedSystemInstaller = false,
+    this.restartRequired = false,
     required this.message,
     this.snapshot,
   });
@@ -290,11 +293,11 @@ class UpdateReceiverService extends ChangeNotifier {
   /// Compile-time version injected via `--dart-define` in CI releases
   static const String compiledVersion = String.fromEnvironment(
     'CASHIO_APP_VERSION',
-    defaultValue: '3.1.1',
+    defaultValue: '3.2.0',
   );
   static const int compiledBuild = int.fromEnvironment(
     'CASHIO_BUILD_NUMBER',
-    defaultValue: 30101,
+    defaultValue: 30200,
   );
 
   /// Official upstream repository and release endpoints for Cash-IO
@@ -327,13 +330,150 @@ class UpdateReceiverService extends ChangeNotifier {
   AppUpdateManifest? _availableUpdate;
   String? _dismissedVersion;
 
+  InAppPatchDriver _patchDriver = ShorebirdInAppPatchDriver();
+  bool _inAppPatchAvailable = false;
+  bool _inAppPatchRestartRequired = false;
+  int? _installedPatchNumber;
+
   String get currentVersion => _currentVersion;
   int get currentBuild => _currentBuild;
   UpdateStatus get status => _status;
   double get downloadProgress => _downloadProgress;
   AppUpdateManifest? get availableUpdate => _availableUpdate;
+  bool get isInAppPatchSupported => _patchDriver.isSupported;
+  bool get inAppPatchAvailable => _inAppPatchAvailable;
+  bool get inAppPatchRestartRequired => _inAppPatchRestartRequired;
+  int? get installedPatchNumber => _installedPatchNumber;
   bool get hasUnreadUpdateBanner =>
-      _availableUpdate != null && _availableUpdate!.version != _dismissedVersion;
+      (_availableUpdate != null && _availableUpdate!.version != _dismissedVersion) ||
+      _inAppPatchAvailable;
+
+  void setPatchDriverForTesting(InAppPatchDriver driver) {
+    _patchDriver = driver;
+  }
+
+  void resetPatchDriverForTesting() {
+    _patchDriver = ShorebirdInAppPatchDriver();
+    _inAppPatchAvailable = false;
+    _inAppPatchRestartRequired = false;
+    _installedPatchNumber = null;
+  }
+
+  /// Checks Shorebird Code Push for a silent in-app Dart/UI patch that downloads
+  /// directly inside Cash-IO without leaving the app or downloading a new APK.
+  Future<InAppPatchCheckResult> checkForInAppPatch() async {
+    if (!_patchDriver.isSupported) {
+      _inAppPatchAvailable = false;
+      _inAppPatchRestartRequired = false;
+      notifyListeners();
+      return const InAppPatchCheckResult(
+        isSupported: false,
+        status: InAppPatchStatus.unavailable,
+      );
+    }
+
+    final currentPatch = await _patchDriver.readCurrentPatchNumber();
+    final patchStatus = await _patchDriver.checkForPatch();
+    _installedPatchNumber = currentPatch;
+    _inAppPatchAvailable = patchStatus == InAppPatchStatus.outdated;
+    _inAppPatchRestartRequired = patchStatus == InAppPatchStatus.restartRequired;
+    if (_inAppPatchAvailable) {
+      _status = UpdateStatus.updateAvailable;
+    }
+    notifyListeners();
+
+    return InAppPatchCheckResult(
+      isSupported: true,
+      status: patchStatus,
+      currentPatchNumber: currentPatch,
+    );
+  }
+
+  /// Creates an encrypted `.cashio.bak` pre-update snapshot, downloads and stages
+  /// the Shorebird patch silently inside Cash-IO, and verifies ledger invariants.
+  Future<UpdateApplyResult> applyInAppPatch({
+    void Function(double progress, String statusText)? onProgress,
+  }) async {
+    if (!_patchDriver.isSupported) {
+      return const UpdateApplyResult(
+        success: false,
+        message: 'Silent in-app patches require a Shorebird release build. Use GitHub APK Update below.',
+      );
+    }
+
+    _status = UpdateStatus.creatingSnapshot;
+    _downloadProgress = 0.2;
+    onProgress?.call(0.2, 'Creating pre-patch vault snapshot (.cashio.bak)...');
+    notifyListeners();
+
+    final nextLabel = '$_currentVersion-patch.${(_installedPatchNumber ?? 0) + 1}';
+    final snapshot = await createEmergencyPreUpdateBackup(
+      targetVersion: nextLabel,
+      note: 'Automated pre-patch snapshot before in-app code push',
+    );
+
+    if (!verifyLedgerIntegrity()) {
+      _status = UpdateStatus.rolledBack;
+      await rollbackToSnapshot(snapshot.snapshotId);
+      notifyListeners();
+      return UpdateApplyResult(
+        success: false,
+        wasRolledBack: true,
+        message: 'Ledger integrity check failed before patching; restored safely.',
+        snapshot: snapshot,
+      );
+    }
+
+    try {
+      _status = UpdateStatus.downloadingPayload;
+      _downloadProgress = 0.55;
+      onProgress?.call(0.55, 'Downloading silent update directly inside Cash-IO...');
+      notifyListeners();
+
+      await _patchDriver.downloadAndStagePatch();
+
+      _status = UpdateStatus.verifyingIntegrity;
+      _downloadProgress = 0.9;
+      onProgress?.call(0.9, 'Verifying double-entry ledger integrity...');
+      notifyListeners();
+
+      if (!verifyLedgerIntegrity()) {
+        _status = UpdateStatus.rolledBack;
+        await rollbackToSnapshot(snapshot.snapshotId);
+        notifyListeners();
+        return UpdateApplyResult(
+          success: false,
+          wasRolledBack: true,
+          message: 'Post-patch ledger check failed; automatically restored from snapshot.',
+          snapshot: snapshot,
+        );
+      }
+
+      _inAppPatchAvailable = false;
+      _inAppPatchRestartRequired = true;
+      _downloadProgress = 1.0;
+      _status = UpdateStatus.completed;
+      onProgress?.call(1.0, 'In-app update installed! Restart Cash-IO to activate.');
+      notifyListeners();
+
+      return UpdateApplyResult(
+        success: true,
+        restartRequired: true,
+        launchedSystemInstaller: false,
+        message:
+            'Update installed silently inside Cash-IO (backup ${snapshot.snapshotId} saved)! Close and reopen Cash-IO to activate.',
+        snapshot: snapshot,
+      );
+    } catch (e) {
+      _status = UpdateStatus.error;
+      notifyListeners();
+      return UpdateApplyResult(
+        success: false,
+        message: 'In-app patch download failed ($e). Your emergency backup (${snapshot.snapshotId}) is safe.',
+        snapshot: snapshot,
+      );
+    }
+  }
 
   final List<EmergencyRollbackSnapshot> _snapshots = [];
   List<EmergencyRollbackSnapshot> get availableRollbackSnapshots => List.unmodifiable(_snapshots);
@@ -492,6 +632,7 @@ class UpdateReceiverService extends ChangeNotifier {
       return _availableUpdate;
     }
     _lastAutoCheckAt = now;
+    await checkForInAppPatch();
     return checkForUpdates(forceCheck: true);
   }
 
@@ -1003,6 +1144,9 @@ class UpdateReceiverService extends ChangeNotifier {
     _dismissedVersion = null;
     _downloadProgress = 0.0;
     _status = UpdateStatus.idle;
+    _inAppPatchAvailable = false;
+    _inAppPatchRestartRequired = false;
+    _installedPatchNumber = null;
     _snapshots.clear();
   }
 }
