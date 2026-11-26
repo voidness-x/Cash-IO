@@ -79,8 +79,19 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Check Shorebird Activation
+        id: check_shorebird
+        env:
+          SHOREBIRD_TOKEN: ${{ secrets.SHOREBIRD_TOKEN }}
+        run: |
+          if [ -n "$SHOREBIRD_TOKEN" ] && ! grep -q "cashio-shorebird-pending-init" shorebird.yaml; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Shorebird CLI (when SHOREBIRD_TOKEN is configured)
-        if: ${{ secrets.SHOREBIRD_TOKEN != '' }}
+        if: steps.check_shorebird.outputs.enabled == 'true'
         uses: shorebirdtech/setup-shorebird@v1
 
       - name: Restore Persistent Android Release Signing Keystore
