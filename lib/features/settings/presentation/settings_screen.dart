@@ -64,7 +64,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           body: ListView(
-            padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space4, tokens.space4, 124),
+            padding: EdgeInsets.fromLTRB(
+              tokens.space4,
+              tokens.space4,
+              tokens.space4,
+              MediaQuery.paddingOf(context).bottom + 112,
+            ),
             children: [
               // Active Profile Card (with subtle Hero Glow)
               StaggeredEntrance(
@@ -117,7 +122,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             context: context,
                             isScrollControlled: true,
                             backgroundColor: Colors.transparent,
-                            builder: (ctx) => const VaultSwitcherSheet(),
+                            builder: (ctx) => VaultSwitcherSheet(
+                              onAllVaultsDeleted: widget.onSwitchProfile,
+                            ),
                           );
                         },
                         style: OutlinedButton.styleFrom(
@@ -568,6 +575,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             },
                           ),
                         ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(height: tokens.space5),
+
+              // Section 4: Danger Zone (Delete Account / Vault)
+              StaggeredEntrance(
+                index: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionHeader('DANGER ZONE', tokens.statusExpense),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: tokens.bgSurface,
+                        borderRadius: BorderRadius.circular(tokens.radiusMd),
+                        border: Border.all(color: tokens.statusExpense.withValues(alpha: 0.35)),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(tokens.radiusMd),
+                        clipBehavior: Clip.antiAlias,
+                        child: ListTile(
+                          key: const ValueKey('settings_delete_vault_tile'),
+                          leading: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: tokens.statusExpense.withValues(alpha: 0.14),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(Icons.delete_forever_rounded, color: tokens.statusExpense, size: 19),
+                          ),
+                          title: Text(
+                            'Delete Vault / Account',
+                            style: GoogleFonts.mukta(
+                              color: tokens.statusExpense,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          subtitle: Text(
+                            'Permanently erase "${repo.profileName}", ledger & encryption keys',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 12),
+                          ),
+                          trailing: Icon(Icons.chevron_right, color: tokens.statusExpense),
+                          onTap: () async {
+                            final result = await VaultSwitcherSheet.showDeleteVaultDialog(
+                              context,
+                              profileId: repo.profileId,
+                              profileName: repo.profileName,
+                              onAllVaultsDeleted: widget.onSwitchProfile,
+                            );
+                            if (result != null && result.success && result.hasRemainingVaults && context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    result.message,
+                                    style: GoogleFonts.mukta(fontWeight: FontWeight.bold),
+                                  ),
+                                  backgroundColor: tokens.statusExpense,
+                                ),
+                              );
+                            }
+                          },
                         ),
                       ),
                     ),

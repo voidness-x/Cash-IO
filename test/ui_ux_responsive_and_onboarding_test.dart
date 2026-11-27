@@ -92,22 +92,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
     expect(tester.takeException(), isNull);
 
-    // 2. Dashboard Screen (Insights, Savings, Breakdown)
+    // 2. Dashboard Screen (Streamlined Home)
     await tester.pumpWidget(_wrapCompactPhone(const DashboardScreen()));
     await tester.pump(const Duration(milliseconds: 550));
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.text('Savings'));
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.text('Breakdown'));
-    await tester.pump(const Duration(milliseconds: 250));
-    expect(tester.takeException(), isNull);
-
-    // 3. Accounts Screen
+    // 3. Accounts Screen (including Savings Goals filter chip)
     await tester.pumpWidget(_wrapCompactPhone(const AccountsScreen()));
     await tester.pump(const Duration(milliseconds: 400));
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.textContaining('Savings ('));
+    await tester.pump(const Duration(milliseconds: 250));
     expect(tester.takeException(), isNull);
 
     // 4. Envelopes Screen

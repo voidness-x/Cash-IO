@@ -407,6 +407,85 @@ class VaultRepository extends ChangeNotifier {
     return true;
   }
 
+  /// Permanently deletes a cryptographic vault and all its accounts, transactions,
+  /// budgets, and keystore credentials after verifying its 6-digit PIN.
+  Future<VaultDeleteResult> deleteVault(
+    String profileId, {
+    required String pin,
+  }) async {
+    final isValid = await HardwareVaultService.instance.verifyPin(profileId, pin);
+    if (!isValid) {
+      return const VaultDeleteResult(
+        success: false,
+        hasRemainingVaults: true,
+        message: 'Incorrect PIN. Deletion cancelled.',
+      );
+    }
+
+    final deletingActive = _profileId == profileId;
+    _inMemoryVaultSnapshots.remove(profileId);
+
+    try {
+      await DatabaseHelper.instance.deleteProfile(profileId).timeout(const Duration(seconds: 2));
+    } catch (e) {
+      debugPrint('Persistence notice (deleteProfile): $e');
+    }
+
+    await HardwareVaultService.instance.deleteProfileVaultCredentials(profileId);
+
+    // Clear active pointers first if deleting the active vault so getAvailableProfiles
+    // does not re-snapshot the deleted vault.
+    if (deletingActive) {
+      _profileId = _placeholderProfileId;
+      _profileName = 'Personal Vault';
+      _accounts.clear();
+      _transactions.clear();
+      _envelopes.clear();
+      _savingsGoals.clear();
+      _availableToAssignCents = 0;
+    }
+
+    final remaining = (await getAvailableProfiles())
+        .where((p) => p['id'] != profileId && p['id'] != _placeholderProfileId)
+        .toList();
+
+    if (remaining.isEmpty) {
+      _profileId = _placeholderProfileId;
+      _profileName = 'Personal Vault';
+      _accounts.clear();
+      _transactions.clear();
+      _envelopes.clear();
+      _savingsGoals.clear();
+      _availableToAssignCents = 0;
+      notifyListeners();
+      return const VaultDeleteResult(
+        success: true,
+        hasRemainingVaults: false,
+        message: 'Vault permanently deleted.',
+      );
+    }
+
+    if (deletingActive) {
+      final next = remaining.first;
+      final nextId = next['id'] as String;
+      final nextName = next['name'] as String? ?? 'Encrypted Vault';
+      await loadPersistentVault(nextId);
+      return VaultDeleteResult(
+        success: true,
+        hasRemainingVaults: true,
+        switchedToProfileName: nextName,
+        message: 'Vault deleted. Switched to $nextName.',
+      );
+    }
+
+    notifyListeners();
+    return const VaultDeleteResult(
+      success: true,
+      hasRemainingVaults: true,
+      message: 'Vault permanently deleted.',
+    );
+  }
+
   /// Creates and activates a new secondary cryptographic vault with isolated PIN & seed
   Future<String> createSecondaryVault({
     required String name,
@@ -1048,6 +1127,20 @@ class VaultRepository extends ChangeNotifier {
     }
     return buffer.toString();
   }
+}
+
+class VaultDeleteResult {
+  final bool success;
+  final bool hasRemainingVaults;
+  final String? switchedToProfileName;
+  final String message;
+
+  const VaultDeleteResult({
+    required this.success,
+    required this.hasRemainingVaults,
+    this.switchedToProfileName,
+    required this.message,
+  });
 }
 
 class _VaultSnapshot {

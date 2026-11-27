@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -11,12 +12,7 @@ import '../../receipts/presentation/receipt_viewer_dialog.dart';
 import '../../../core/widgets/cashio_logo.dart';
 import '../../../core/widgets/animated_money_bar.dart';
 import 'cash_action_sheets.dart';
-import '../../analytics/presentation/category_spending_donut_card.dart';
-import '../../subscriptions/presentation/recurring_bills_sheet.dart';
 import '../../fx/presentation/fx_converter_sheet.dart';
-import '../../advisory/presentation/financial_advisory_card.dart';
-import '../../savings/presentation/savings_goals_deck.dart';
-import '../../savings/presentation/savings_goal_sheets.dart';
 import '../../profile_setup/presentation/quick_financial_setup_sheet.dart';
 import '../../../core/services/ledger_search_service.dart';
 import '../../../core/services/update_receiver_service.dart';
@@ -43,10 +39,6 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _isSearchExpanded = false;
   bool _promptedUpdateDialogThisSession = false;
   bool _dismissedQuickSetupCard = false;
-
-  // Clean segmented focus tab to avoid stacking 5 heavy analytics widgets at once:
-  // 0: Insights & 30d Flow, 1: Savings Vaults, 2: Spending Breakdown
-  int _selectedFocusTab = 0;
 
   @override
   void initState() {
@@ -124,107 +116,152 @@ class _DashboardScreenState extends State<DashboardScreen>
             !_dismissedQuickSetupCard && transactions.isEmpty && repo.totalAssetsCents == 0;
 
         return FrostedScaffold(
-          appBar: AppBar(
-            titleSpacing: tokens.space4,
-            title: Row(
+          body: SafeArea(
+            bottom: false,
+            child: Column(
               children: [
-                const CashIOLogo(
-                  fontSize: 18,
-                  animateO: true,
-                  showSubtitle: false,
-                ),
-                const SizedBox(width: 10),
-                Container(width: 1, height: 16, color: tokens.borderHairline),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(8),
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      showModalBottomSheet(
-                        context: context,
-                        isScrollControlled: true,
-                        backgroundColor: Colors.transparent,
-                        builder: (ctx) => const VaultSwitcherSheet(),
-                      );
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              repo.profileName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.spaceGrotesk(
-                                color: tokens.textPrimary,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
+                // Matching Frosted Floating Top Pill Header (paired with Bottom Floating Dock)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
+                  child: ClipRRect(
+                    key: const ValueKey('floating_top_bar'),
+                    borderRadius: BorderRadius.circular(24),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      child: Container(
+                        height: 54,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: tokens.bgSurfaceGlass,
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(
+                            color: tokens.accentGold.withValues(alpha: 0.30),
+                            width: 1.0,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.22),
+                              blurRadius: 16,
+                              offset: const Offset(0, 6),
+                            ),
+                          ],
+                        ),
+                        child: Row(
+                          children: [
+                            const CashIOLogo(
+                              fontSize: 17,
+                              animateO: false,
+                              showSubtitle: false,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: InkWell(
+                                  key: const ValueKey('top_bar_vault_pill'),
+                                  borderRadius: BorderRadius.circular(tokens.radiusPill),
+                                  onTap: () {
+                                    HapticFeedback.lightImpact();
+                                    showModalBottomSheet(
+                                      context: context,
+                                      isScrollControlled: true,
+                                      backgroundColor: Colors.transparent,
+                                      builder: (ctx) => VaultSwitcherSheet(
+                                        onAllVaultsDeleted: widget.onSwitchProfile,
+                                      ),
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color: tokens.bgSurfaceElevated,
+                                      borderRadius: BorderRadius.circular(tokens.radiusPill),
+                                      border: Border.all(color: tokens.borderHairline),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.shield_outlined,
+                                          size: 13,
+                                          color: tokens.accentGold,
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Flexible(
+                                          child: Text(
+                                            repo.profileName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.spaceGrotesk(
+                                              color: tokens.textPrimary,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 2),
+                                        Icon(
+                                          Icons.keyboard_arrow_down_rounded,
+                                          color: tokens.textSecondary,
+                                          size: 15,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 2),
-                          Icon(Icons.keyboard_arrow_down_rounded, color: tokens.textSecondary, size: 18),
-                        ],
+                            const SizedBox(width: 6),
+                            _buildTopBarIconButton(
+                              tokens: tokens,
+                              tooltip: 'Updates & Rollback',
+                              hasBadge: otaService.hasUnreadUpdateBanner,
+                              icon: Icons.system_update_alt_rounded,
+                              iconColor: otaService.hasUnreadUpdateBanner
+                                  ? tokens.accentGold
+                                  : tokens.textSecondary,
+                              onTap: () {
+                                HapticFeedback.lightImpact();
+                                _openOtaUpdateSheet(context);
+                              },
+                            ),
+                            const SizedBox(width: 6),
+                            _buildTopBarIconButton(
+                              tokens: tokens,
+                              tooltip: 'Switch or Manage Vaults',
+                              icon: Icons.layers_outlined,
+                              iconColor: tokens.textPrimary,
+                              onTap: () {
+                                HapticFeedback.lightImpact();
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (ctx) => VaultSwitcherSheet(
+                                    onAllVaultsDeleted: widget.onSwitchProfile,
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ],
-            ),
-            actions: [
-              IconButton(
-                icon: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Icon(
-                      Icons.system_update_alt_rounded,
-                      size: 21,
-                      color: otaService.availableUpdate != null ? tokens.accent : tokens.textSecondary,
-                    ),
-                    if (otaService.availableUpdate != null)
-                      Positioned(
-                        right: -2,
-                        top: -2,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: tokens.accent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
+
+                // Main Scrollable Dashboard Content
+                Expanded(
+                  child: FadeTransition(
+                    opacity: _fadeAnimation,
+                    child: ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        tokens.space4,
+                        tokens.space2,
+                        tokens.space4,
+                        MediaQuery.paddingOf(context).bottom + 112,
                       ),
-                  ],
-                ),
-                tooltip: 'Updates & Rollback',
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  _openOtaUpdateSheet(context);
-                },
-              ),
-              IconButton(
-                icon: const Icon(Icons.layers_outlined, size: 21),
-                tooltip: 'Switch Vault',
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    backgroundColor: Colors.transparent,
-                    builder: (ctx) => const VaultSwitcherSheet(),
-                  );
-                },
-              ),
-            ],
-          ),
-          body: FadeTransition(
-            opacity: _fadeAnimation,
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space2, tokens.space4, 124),
-              children: [
+                      children: [
                 // 0A. LIVE GITHUB RELEASE UPDATE BANNER
                 if (otaService.hasUnreadUpdateBanner && otaService.availableUpdate != null) ...[
                   Container(
@@ -356,7 +393,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                   onAddCash: () => _openAddCashSheet(context, currency),
                   onSpendCash: () => _openSpendCashSheet(context, currency),
                   onMoveCash: () => _openMoveMoneySheet(context, currency),
-                  onOpenRecurring: () => _openRecurringBillsSheet(context, currency),
                   onOpenFx: () => _openFxConverterSheet(context, currency),
                 ),
                 SizedBox(height: tokens.space3),
@@ -376,60 +412,71 @@ class _DashboardScreenState extends State<DashboardScreen>
                   envelopes: repo.envelopes,
                   currency: currency,
                 ),
-                SizedBox(height: tokens.space4),
-
-                // 4. FOCUS VIEW SWITCHER (Smooth Pop-Up Switching — Zero Clutter)
-                _buildFocusTabSelector(tokens),
-                SizedBox(height: tokens.space3),
-
-                AnimatedSwitcher(
-                  duration: MediaQuery.disableAnimationsOf(context)
-                      ? Duration.zero
-                      : const Duration(milliseconds: 220),
-                  switchInCurve: Curves.easeOutCubic,
-                  switchOutCurve: Curves.easeInCubic,
-                  transitionBuilder: (child, animation) {
-                    if (MediaQuery.disableAnimationsOf(context)) return child;
-                    final scale = Tween<double>(begin: 0.97, end: 1.0).animate(
-                      CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
-                    );
-                    return FadeTransition(
-                      opacity: animation,
-                      child: ScaleTransition(scale: scale, child: child),
-                    );
-                  },
-                  child: KeyedSubtree(
-                    key: ValueKey<int>(_selectedFocusTab),
-                    child: _selectedFocusTab == 0
-                        ? Column(
-                            children: [
-                              _buildCashFlowHealthBar(
-                                tokens: tokens,
-                                incomeCents: income30d,
-                                expenseCents: expense30d,
-                                currency: currency,
-                              ),
-                              SizedBox(height: tokens.space3),
-                              FinancialAdvisoryCard(
-                                onOpenSavingsGoals: () => _openCreateGoalSheet(context, currency),
-                              ),
-                            ],
-                          )
-                        : _selectedFocusTab == 1
-                            ? SavingsGoalsDeck(currency: currency)
-                            : CategorySpendingDonutCard(currency: currency),
-                  ),
-                ),
-
                 SizedBox(height: tokens.space5),
 
-                // 5. COLOR-CODED RECENT ACTIVITY & SEARCH
+                // 4. COLOR-CODED RECENT ACTIVITY & SEARCH
                 _buildRecentActivitySection(context, tokens, transactions, currency, repo.profileId),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildTopBarIconButton({
+    required CashIOThemeExtension tokens,
+    required String tooltip,
+    required IconData icon,
+    required Color iconColor,
+    required VoidCallback onTap,
+    bool hasBadge = false,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: tokens.bgSurfaceElevated,
+        shape: CircleBorder(
+          side: BorderSide(color: tokens.borderHairline, width: 1.0),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            width: 34,
+            height: 34,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(icon, size: 17, color: iconColor),
+                if (hasBadge)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        color: tokens.accentGold,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: tokens.accentGold.withValues(alpha: 0.7),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -690,7 +737,9 @@ class _DashboardScreenState extends State<DashboardScreen>
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-                children: envelopes.map((env) {
+                children: envelopes.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final env = entry.value;
                   final assigned = env.assignedCents;
                   final spent = env.spentCents;
                   final remaining = env.remainingCents;
@@ -701,9 +750,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                       : (ratio >= 0.8 ? tokens.accentChampagne : tokens.accentGold);
 
                   return Container(
-                    width: 168,
-                    margin: const EdgeInsets.only(right: 10),
-                    padding: const EdgeInsets.all(13),
+                    key: ValueKey('home_budget_card_$idx'),
+                    width: 224,
+                    margin: const EdgeInsets.only(right: 12),
+                    padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
                       color: tokens.bgSurface,
                       borderRadius: BorderRadius.circular(tokens.radiusMd),
@@ -735,7 +785,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 overflow: TextOverflow.ellipsis,
                                 style: GoogleFonts.spaceGrotesk(
                                   color: tokens.textPrimary,
-                                  fontSize: 12,
+                                  fontSize: 12.5,
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
@@ -752,7 +802,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                               '${CurrencyUtils.format(remaining.abs(), currency: currency)} ${isOver ? 'over' : 'left'}',
                               style: GoogleFonts.jetBrainsMono(
                                 color: isOver ? tokens.statusExpense : tokens.textPrimary,
-                                fontSize: 13,
+                                fontSize: 13.5,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
@@ -767,7 +817,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          '${CurrencyUtils.format(spent, currency: currency)} / ${CurrencyUtils.format(assigned, currency: currency)}',
+                          'Spent: ${CurrencyUtils.formatCompact(spent, currency: currency)} • Limit: ${CurrencyUtils.formatCompact(assigned, currency: currency)}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.mukta(
@@ -787,69 +837,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildFocusTabSelector(CashIOThemeExtension tokens) {
-    const tabs = [
-      (Icons.auto_awesome_outlined, 'Insights'),
-      (Icons.savings_outlined, 'Savings'),
-      (Icons.pie_chart_outline_rounded, 'Breakdown'),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: tokens.bgSurface,
-        borderRadius: BorderRadius.circular(tokens.radiusMd),
-        border: Border.all(color: tokens.borderHairline),
-      ),
-      child: Row(
-        children: List.generate(tabs.length, (i) {
-          final isSelected = _selectedFocusTab == i;
-          return Expanded(
-            child: InkWell(
-              onTap: () {
-                HapticFeedback.selectionClick();
-                setState(() => _selectedFocusTab = i);
-              },
-              borderRadius: BorderRadius.circular(tokens.radiusSm),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
-                decoration: BoxDecoration(
-                  color: isSelected ? tokens.accent.withValues(alpha: 0.16) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(tokens.radiusSm),
-                  border: isSelected ? Border.all(color: tokens.accent.withValues(alpha: 0.45)) : null,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      tabs[i].$1,
-                      size: 15,
-                      color: isSelected ? tokens.accent : tokens.textSecondary,
-                    ),
-                    const SizedBox(width: 5),
-                    Flexible(
-                      child: Text(
-                        tabs[i].$2,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.spaceGrotesk(
-                          color: isSelected ? tokens.textPrimary : tokens.textSecondary,
-                          fontSize: 11,
-                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-
   Widget _buildCurrentCashDeck({
     required CashIOThemeExtension tokens,
     required int currentCashCents,
@@ -859,7 +846,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     required VoidCallback onAddCash,
     required VoidCallback onSpendCash,
     required VoidCallback onMoveCash,
-    required VoidCallback onOpenRecurring,
     required VoidCallback onOpenFx,
   }) {
     final isNegative = currentCashCents < 0;
@@ -1025,24 +1011,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    IconButton.outlined(
-                      onPressed: onOpenRecurring,
-                      tooltip: 'Recurring Bills',
-                      icon: Icon(Icons.repeat_rounded, size: 18, color: tokens.accentGold),
-                      style: IconButton.styleFrom(
-                        side: BorderSide(color: tokens.borderHairline),
-                        backgroundColor: tokens.bgSurfaceElevated,
-                        shape: const CircleBorder(),
-                      ),
-                    ),
                   ],
                 ),
               ],
             ),
           ),
 
-          // Cash & Debts Split Footer with Animated Balance Ratio Bar (100% Overflow-Safe)
+          // Cash & Debts Split Footer with Accurate Zero-State Track (100% Overflow-Safe)
           Container(
             padding: EdgeInsets.symmetric(horizontal: tokens.space4, vertical: tokens.space3),
             decoration: BoxDecoration(
@@ -1052,29 +1027,34 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
             child: Column(
               children: [
-                AnimatedSegmentedMoneyBar(
-                  height: 4,
-                  segments: [
-                    MoneyBarSegment(
-                      weight: (currentCashCents.abs() + totalLiabilitiesCents.abs()) > 0
-                          ? (currentCashCents.clamp(0, 1 << 60) /
-                                  (currentCashCents.abs() + totalLiabilitiesCents.abs()))
-                              .clamp(0.06, 0.96)
-                          : 0.94,
-                      color: tokens.statusIncome,
-                    ),
-                    MoneyBarSegment(
-                      weight: (currentCashCents.abs() + totalLiabilitiesCents.abs()) > 0
-                          ? (totalLiabilitiesCents.abs() /
-                                  (currentCashCents.abs() + totalLiabilitiesCents.abs()))
-                              .clamp(0.04, 0.94)
-                          : 0.06,
-                      color: totalLiabilitiesCents > 0
-                          ? tokens.statusExpense
-                          : tokens.borderHairline,
-                    ),
-                  ],
-                ),
+                if (currentCashCents == 0 && totalLiabilitiesCents == 0)
+                  AnimatedMoneyBar(
+                    key: const ValueKey('hero_zero_ratio_bar'),
+                    value: 0.0,
+                    height: 4,
+                    fillColor: tokens.statusIncome,
+                    glow: false,
+                  )
+                else
+                  AnimatedSegmentedMoneyBar(
+                    height: 4,
+                    segments: [
+                      MoneyBarSegment(
+                        weight: (currentCashCents.clamp(0, 1 << 60) /
+                                (currentCashCents.abs() + totalLiabilitiesCents.abs()))
+                            .clamp(0.06, 0.96),
+                        color: tokens.statusIncome,
+                      ),
+                      MoneyBarSegment(
+                        weight: (totalLiabilitiesCents.abs() /
+                                (currentCashCents.abs() + totalLiabilitiesCents.abs()))
+                            .clamp(0.04, 0.94),
+                        color: totalLiabilitiesCents > 0
+                            ? tokens.statusExpense
+                            : tokens.borderHairline,
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 10),
                 Row(
                   children: [
@@ -1140,97 +1120,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCashFlowHealthBar({
-    required CashIOThemeExtension tokens,
-    required int incomeCents,
-    required int expenseCents,
-    required String currency,
-  }) {
-    final totalFlow = incomeCents + expenseCents;
-    final incomeRatio = totalFlow > 0 ? (incomeCents / totalFlow) : 0.5;
-
-    return Container(
-      padding: EdgeInsets.all(tokens.space4),
-      decoration: BoxDecoration(
-        color: tokens.bgSurface,
-        borderRadius: BorderRadius.circular(tokens.radiusMd),
-        border: Border.all(color: tokens.borderHairline),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '30-DAY CASHFLOW',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.spaceGrotesk(
-                    color: tokens.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ),
-              Text(
-                incomeCents >= expenseCents ? 'NET SURPLUS' : 'NET DEFICIT',
-                style: GoogleFonts.mukta(
-                  color: incomeCents >= expenseCents ? tokens.statusIncome : tokens.statusExpense,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          AnimatedSegmentedMoneyBar(
-            height: 7,
-            segments: [
-              MoneyBarSegment(weight: incomeRatio.clamp(0.05, 0.95), color: tokens.statusIncome),
-              MoneyBarSegment(weight: (1.0 - incomeRatio).clamp(0.05, 0.95), color: tokens.statusExpense),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'In: +${CurrencyUtils.format(incomeCents, currency: currency)}',
-                    style: GoogleFonts.jetBrainsMono(
-                      color: tokens.statusIncome,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    'Out: -${CurrencyUtils.format(expenseCents, currency: currency)}',
-                    style: GoogleFonts.jetBrainsMono(
-                      color: tokens.statusExpense,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -1325,7 +1214,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
             child: Center(
               child: Text(
-                'No transactions yet. Tap "Add Cash" or "New Entry" to log your first transaction.',
+                'No transactions yet. Tap "Add" or "Spend" to log your first transaction.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 13),
               ),
@@ -1540,18 +1429,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  void _openRecurringBillsSheet(BuildContext context, String currency) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.tokens.bgPrimary,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(context.tokens.radiusLg)),
-      ),
-      builder: (ctx) => RecurringBillsSheet(baseCurrency: currency),
-    );
-  }
-
   void _openFxConverterSheet(BuildContext context, String currency) {
     showModalBottomSheet(
       context: context,
@@ -1561,18 +1438,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         borderRadius: BorderRadius.vertical(top: Radius.circular(context.tokens.radiusLg)),
       ),
       builder: (ctx) => FxConverterSheet(baseCurrency: currency),
-    );
-  }
-
-  void _openCreateGoalSheet(BuildContext context, String currency) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: context.tokens.bgPrimary,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(context.tokens.radiusLg)),
-      ),
-      builder: (ctx) => CreateSavingsGoalSheet(baseCurrency: currency),
     );
   }
 }

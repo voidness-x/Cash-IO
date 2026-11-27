@@ -5,6 +5,7 @@ import '../../../core/theme/tokens.dart';
 import '../../../core/theme/frosted_scaffold.dart';
 import '../../../core/models/finance_models.dart';
 import '../../../core/storage/vault_repository.dart';
+import '../../../core/security/hardware_vault_service.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/widgets/animated_money_bar.dart';
 
@@ -16,6 +17,28 @@ class EnvelopesScreen extends StatefulWidget {
 }
 
 class _EnvelopesScreenState extends State<EnvelopesScreen> {
+  static const String _tipDismissedKey = 'cashio_budgets_tip_dismissed';
+  bool _tipDismissed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTipDismissedState();
+  }
+
+  Future<void> _loadTipDismissedState() async {
+    final stored = await HardwareVaultService.instance.readPreference(_tipDismissedKey);
+    if (mounted && stored == 'true') {
+      setState(() => _tipDismissed = true);
+    }
+  }
+
+  void _dismissTip() {
+    HapticFeedback.selectionClick();
+    setState(() => _tipDismissed = true);
+    HardwareVaultService.instance.savePreference(_tipDismissedKey, 'true');
+  }
+
   @override
   Widget build(BuildContext context) {
     final repo = VaultRepository.instance;
@@ -41,29 +64,14 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                 letterSpacing: 1.0,
               ),
             ),
-            actions: [
-              if (envelopes.length >= 2) ...[
-                IconButton(
-                  icon: const Icon(Icons.sync_alt_rounded),
-                  tooltip: 'Move Budget Limit',
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    _showQuickMoveSheet(context, envelopes, currency);
-                  },
-                ),
-              ],
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                tooltip: 'Add Monthly Budget',
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  _showAddEnvelopeSheet(context, currency);
-                },
-              ),
-            ],
           ),
           body: ListView(
-            padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space4, tokens.space4, 124),
+            padding: EdgeInsets.fromLTRB(
+              tokens.space4,
+              tokens.space4,
+              tokens.space4,
+              MediaQuery.paddingOf(context).bottom + 112,
+            ),
             children: [
               // 1. Glowing Safe to Budget Command Hero
               StaggeredEntrance(
@@ -181,9 +189,9 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                       SizedBox(height: tokens.space3),
                       Row(
                         children: [
-                          Expanded(child: _buildMiniStat('BUDGETED', CurrencyUtils.format(totalAssigned, currency: currency), tokens)),
+                          Expanded(child: _buildMiniStat('BUDGETED', CurrencyUtils.formatCompact(totalAssigned, currency: currency), tokens)),
                           Container(width: 1, height: 24, color: tokens.borderSubtle),
-                          Expanded(child: _buildMiniStat('SPENT', CurrencyUtils.format(totalSpent, currency: currency), tokens)),
+                          Expanded(child: _buildMiniStat('SPENT', CurrencyUtils.formatCompact(totalSpent, currency: currency), tokens)),
                           Container(width: 1, height: 24, color: tokens.borderSubtle),
                           Expanded(child: _buildMiniStat('LIMITS', '${envelopes.length}', tokens)),
                         ],
@@ -194,28 +202,38 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
               ),
               SizedBox(height: tokens.space3),
 
-              // Beginner-friendly 1-line explanation of Monthly Budgets
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: tokens.space3, vertical: tokens.space2),
-                decoration: BoxDecoration(
-                  color: tokens.bgSurfaceElevated.withValues(alpha: 0.65),
-                  borderRadius: BorderRadius.circular(tokens.radiusSm),
-                  border: Border.all(color: tokens.borderSubtle),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.lightbulb_outline_rounded, size: 16, color: tokens.accentGold),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Divide your money into monthly spending caps (Food, Bills, Fun). Link a budget when spending to watch bars update live.',
-                        style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 11.5, height: 1.3),
+              // Dismissible borderless explanation banner for Monthly Budgets
+              if (!_tipDismissed) ...[
+                Container(
+                  key: const ValueKey('budgets_tip_banner'),
+                  padding: EdgeInsets.fromLTRB(tokens.space3, tokens.space2, 4, tokens.space2),
+                  decoration: BoxDecoration(
+                    color: tokens.bgSurfaceElevated.withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(tokens.radiusSm),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.lightbulb_outline_rounded, size: 16, color: tokens.accentGold),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Divide your money into monthly spending caps (Food, Bills, Fun). Link a budget when spending to watch bars update live.',
+                          style: GoogleFonts.mukta(color: tokens.textSecondary, fontSize: 11.5, height: 1.3),
+                        ),
                       ),
-                    ),
-                  ],
+                      IconButton(
+                        key: const ValueKey('dismiss_budgets_tip_button'),
+                        icon: Icon(Icons.close_rounded, size: 16, color: tokens.textTertiary),
+                        tooltip: 'Dismiss tip',
+                        visualDensity: VisualDensity.compact,
+                        onPressed: _dismissTip,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              SizedBox(height: tokens.space4),
+                SizedBox(height: tokens.space3),
+              ],
+              SizedBox(height: tokens.space1),
 
               // 2. Action Strip
               if (envelopes.isNotEmpty) ...[
@@ -401,12 +419,8 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
                 height: 36,
                 decoration: BoxDecoration(
                   color: (isOverspent ? tokens.statusExpense : tokens.statusIncome)
-                      .withValues(alpha: 0.15),
+                      .withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(tokens.radiusSm),
-                  border: Border.all(
-                    color: (isOverspent ? tokens.statusExpense : tokens.statusIncome)
-                        .withValues(alpha: 0.3),
-                  ),
                 ),
                 child: Icon(
                   env.icon,
@@ -482,7 +496,7 @@ class _EnvelopesScreenState extends State<EnvelopesScreen> {
             children: [
               Expanded(
                 child: Text(
-                  'Spent: ${CurrencyUtils.format(spent, currency: currency)} • Assigned: ${CurrencyUtils.format(assigned, currency: currency)}',
+                  'Spent: ${CurrencyUtils.formatCompact(spent, currency: currency)} • Assigned: ${CurrencyUtils.formatCompact(assigned, currency: currency)}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),

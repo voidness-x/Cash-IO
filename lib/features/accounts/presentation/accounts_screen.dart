@@ -7,6 +7,7 @@ import '../../../core/models/finance_models.dart';
 import '../../../core/storage/vault_repository.dart';
 import '../../../core/utils/currency_utils.dart';
 import '../../../core/widgets/animated_money_bar.dart';
+import '../../savings/presentation/savings_goals_deck.dart';
 
 class AccountsScreen extends StatefulWidget {
   const AccountsScreen({super.key});
@@ -17,6 +18,7 @@ class AccountsScreen extends StatefulWidget {
 
 class _AccountsScreenState extends State<AccountsScreen> {
   AccountType? _selectedFilter;
+  bool _showSavingsOnly = false;
 
   @override
   Widget build(BuildContext context) {
@@ -48,29 +50,14 @@ class _AccountsScreenState extends State<AccountsScreen> {
                 letterSpacing: 1.0,
               ),
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.swap_horiz_rounded),
-                tooltip: 'Move Money',
-                onPressed: assetAccounts.length >= 2
-                    ? () {
-                        HapticFeedback.lightImpact();
-                        _showTransferSheet(context, assetAccounts, currency);
-                      }
-                    : null,
-              ),
-              IconButton(
-                icon: const Icon(Icons.add_circle_outline),
-                tooltip: 'Add Wallet',
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  _showAddAccountSheet(context, currency);
-                },
-              ),
-            ],
           ),
           body: ListView(
-            padding: EdgeInsets.fromLTRB(tokens.space4, tokens.space4, tokens.space4, 124),
+            padding: EdgeInsets.fromLTRB(
+              tokens.space4,
+              tokens.space4,
+              tokens.space4,
+              MediaQuery.paddingOf(context).bottom + 112,
+            ),
             children: [
               // 1. Glowing Financial Position Summary Deck
               StaggeredEntrance(
@@ -87,7 +74,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           Expanded(
                             child: _buildSummaryColumn(
                               'CASH & BANK',
-                              CurrencyUtils.format(totalAssets, currency: currency),
+                              CurrencyUtils.formatCompact(totalAssets, currency: currency, showSymbol: true),
                               tokens.statusIncome,
                               tokens.textSecondary,
                               Icons.account_balance_wallet_outlined,
@@ -97,7 +84,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           Expanded(
                             child: _buildSummaryColumn(
                               'DEBTS',
-                              CurrencyUtils.format(totalLiabilities, currency: currency),
+                              CurrencyUtils.formatCompact(totalLiabilities, currency: currency, showSymbol: true),
                               tokens.statusExpense,
                               tokens.textSecondary,
                               Icons.credit_card_outlined,
@@ -107,7 +94,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                           Expanded(
                             child: _buildSummaryColumn(
                               'NET WORTH',
-                              CurrencyUtils.format(netWorth, currency: currency),
+                              CurrencyUtils.formatCompact(netWorth, currency: currency, showSymbol: true),
                               netWorth >= 0 ? tokens.statusIncome : tokens.statusExpense,
                               tokens.textSecondary,
                               Icons.shield_outlined,
@@ -152,7 +139,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               ),
               SizedBox(height: tokens.space4),
 
-              // 2. Interactive Filter Bar (Clean Wallets first, Accounting Categories optional)
+              // 2. Interactive Filter Bar (Wallets, Savings Vaults, Debts & Categories)
               StaggeredEntrance(
                 index: 1,
                 child: SingleChildScrollView(
@@ -160,6 +147,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
                   child: Row(
                     children: [
                       _buildFilterChip('My Wallets (${assetAccounts.length + liabilityAccounts.length})', null, tokens),
+                      _buildSavingsChip('Savings (${repo.savingsGoals.length})', tokens),
                       _buildFilterChip('Cash & Bank (${assetAccounts.length})', AccountType.asset, tokens),
                       _buildFilterChip('Debts (${liabilityAccounts.length})', AccountType.liability, tokens),
                       _buildFilterChip('Income (${incomeAccounts.length})', AccountType.income, tokens),
@@ -170,8 +158,10 @@ class _AccountsScreenState extends State<AccountsScreen> {
               ),
               SizedBox(height: tokens.space4),
 
-              // 3. Categorized / Grouped Wallets List (Default shows real Wallets + Debts cleanly)
-              if (_selectedFilter == null) ...[
+              // 3. Categorized / Grouped Wallets & Savings Goals List
+              if (_showSavingsOnly) ...[
+                SavingsGoalsDeck(currency: currency),
+              ] else if (_selectedFilter == null) ...[
                 if (assetAccounts.isNotEmpty)
                   _buildAccountSection(
                     title: 'CASH & BANK WALLETS',
@@ -194,6 +184,9 @@ class _AccountsScreenState extends State<AccountsScreen> {
                     startIndex: 2 + assetAccounts.length,
                     showPercentage: false,
                   ),
+
+                SizedBox(height: tokens.space2),
+                SavingsGoalsDeck(currency: currency),
               ] else ...[
                 // Filtered List
                 _buildFilteredList(
@@ -247,7 +240,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   Widget _buildFilterChip(String label, AccountType? type, CashIOThemeExtension tokens) {
-    final isSelected = _selectedFilter == type;
+    final isSelected = !_showSavingsOnly && _selectedFilter == type;
     return Padding(
       padding: EdgeInsets.only(right: tokens.space2),
       child: FilterChip(
@@ -256,7 +249,39 @@ class _AccountsScreenState extends State<AccountsScreen> {
         onSelected: (_) {
           HapticFeedback.selectionClick();
           setState(() {
+            _showSavingsOnly = false;
             _selectedFilter = type;
+          });
+        },
+        selectedColor: tokens.statusIncome,
+        backgroundColor: tokens.bgSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(tokens.radiusPill),
+          side: BorderSide(
+            color: isSelected ? tokens.statusIncome : tokens.borderHairline,
+          ),
+        ),
+        labelStyle: GoogleFonts.mukta(
+          color: isSelected ? tokens.bgPrimary : tokens.textPrimary,
+          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSavingsChip(String label, CashIOThemeExtension tokens) {
+    final isSelected = _showSavingsOnly;
+    return Padding(
+      padding: EdgeInsets.only(right: tokens.space2),
+      child: FilterChip(
+        label: Text(label),
+        selected: isSelected,
+        onSelected: (_) {
+          HapticFeedback.selectionClick();
+          setState(() {
+            _showSavingsOnly = true;
+            _selectedFilter = null;
           });
         },
         selectedColor: tokens.statusIncome,
@@ -418,9 +443,8 @@ class _AccountsScreenState extends State<AccountsScreen> {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.15),
+                color: color.withValues(alpha: 0.14),
                 borderRadius: BorderRadius.circular(tokens.radiusSm),
-                border: Border.all(color: color.withValues(alpha: 0.3)),
               ),
               child: Icon(account.icon, color: color, size: 20),
             ),

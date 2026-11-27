@@ -5,7 +5,6 @@ import 'package:cash_io/core/theme/original_theme_snapshot.dart';
 import 'package:cash_io/core/theme/theme_controller.dart';
 import 'package:cash_io/core/theme/theme_extension.dart';
 import 'package:cash_io/core/widgets/animated_money_bar.dart';
-import 'package:cash_io/core/widgets/cashio_logo.dart';
 import 'package:cash_io/features/navigation/presentation/main_scaffold.dart';
 import 'package:cash_io/features/dashboard/presentation/dashboard_screen.dart';
 import 'package:cash_io/features/dashboard/presentation/cash_action_sheets.dart';
@@ -170,8 +169,8 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 500));
 
-      // Center Dashboard button uses the signature VaultOMark from CashIOLogo
-      expect(find.byType(VaultOMark), findsAtLeastNWidgets(1));
+      // Center Dashboard button uses a clear labeled Home tab inside the floating dock
+      expect(find.text('Home'), findsOneWidget);
       expect(find.byKey(const ValueKey('floating_nav_bar')), findsOneWidget);
       expect(find.byKey(const ValueKey('center_dashboard_o_button')), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -253,10 +252,10 @@ void main() {
       expect(find.byType(AnimatedMoneyBar), findsAtLeastNWidgets(1));
       expect(tester.takeException(), isNull);
 
-      // 4. Money Forecast: MONEY FORECAST
+      // 4. Insights & Forecast: INSIGHTS & FORECAST
       await tester.pumpWidget(wrap(const ForecastScreen()));
       await tester.pump(const Duration(milliseconds: 500));
-      expect(find.text('MONEY FORECAST'), findsOneWidget);
+      expect(find.text('INSIGHTS & FORECAST'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
       // 5. Settings: Theme & Colors opens ThemeCustomizerSheet

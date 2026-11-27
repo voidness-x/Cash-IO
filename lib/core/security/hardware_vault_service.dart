@@ -222,4 +222,23 @@ class HardwareVaultService {
       return null;
     }
   }
+
+  /// Permanently erases a vault's cryptographic credentials (salt, PIN hash, recovery seed)
+  /// from both in-memory cache and hardware-backed secure storage.
+  Future<void> deleteProfileVaultCredentials(String profileId) async {
+    _memoryCache.remove('vault_salt_$profileId');
+    _memoryCache.remove('vault_pinhash_$profileId');
+    _memoryCache.remove('vault_seed_$profileId');
+    resetLockout(profileId);
+
+    for (final key in [
+      'vault_salt_$profileId',
+      'vault_pinhash_$profileId',
+      'vault_seed_$profileId',
+    ]) {
+      try {
+        await _secureStorage.delete(key: key).timeout(const Duration(seconds: 1));
+      } catch (_) {}
+    }
+  }
 }

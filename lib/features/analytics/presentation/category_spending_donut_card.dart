@@ -102,7 +102,6 @@ class _CategorySpendingDonutCardState extends State<CategorySpendingDonutCard> w
                 decoration: BoxDecoration(
                   color: tokens.bgSurfaceElevated,
                   borderRadius: BorderRadius.circular(tokens.radiusPill),
-                  border: Border.all(color: tokens.borderHairline),
                 ),
                 child: Text(
                   '30 Days',
@@ -135,7 +134,7 @@ class _CategorySpendingDonutCardState extends State<CategorySpendingDonutCard> w
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Tap "Spend Cash" to log purchases and view your categorical spending breakdown.',
+                    'Tap "Spend" to log purchases and view your spending breakdown.',
                     textAlign: TextAlign.center,
                     style: GoogleFonts.mukta(color: tokens.textTertiary, fontSize: 11),
                   ),

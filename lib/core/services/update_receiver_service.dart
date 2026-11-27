@@ -293,11 +293,11 @@ class UpdateReceiverService extends ChangeNotifier {
   /// Compile-time version injected via `--dart-define` in CI releases
   static const String compiledVersion = String.fromEnvironment(
     'CASHIO_APP_VERSION',
-    defaultValue: '3.2.1',
+    defaultValue: '3.3.0',
   );
   static const int compiledBuild = int.fromEnvironment(
     'CASHIO_BUILD_NUMBER',
-    defaultValue: 30201,
+    defaultValue: 30300,
   );
 
   /// Official upstream repository and release endpoints for Cash-IO
@@ -632,8 +632,29 @@ class UpdateReceiverService extends ChangeNotifier {
       return _availableUpdate;
     }
     _lastAutoCheckAt = now;
-    await checkForInAppPatch();
+    await autoHealInAppPatchIfOutdated();
     return checkForUpdates(forceCheck: true);
+  }
+
+  /// Automatically downloads & stages a missing Shorebird patch silently in the background
+  /// (for instance, if Android's "Clear Cache" wiped `code_cache`) while preserving ledger invariants.
+  Future<bool> autoHealInAppPatchIfOutdated() async {
+    final check = await checkForInAppPatch();
+    if (!check.isSupported || check.status != InAppPatchStatus.outdated) {
+      return false;
+    }
+    if (!verifyLedgerIntegrity()) {
+      return false;
+    }
+    try {
+      await _patchDriver.downloadAndStagePatch();
+      _inAppPatchAvailable = false;
+      _inAppPatchRestartRequired = true;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Checks for available updates against the active running version.

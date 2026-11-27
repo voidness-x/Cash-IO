@@ -65,6 +65,56 @@ class CurrencyUtils {
     }
   }
 
+  /// Formats an amount compactly for secondary captions, sub-labels, and tight cards
+  /// (e.g., `250K`, `112.5K`, `1.5M`, `0`) to eliminate repeated `IQD` visual clutter.
+  static String formatCompact(
+    int amountCents, {
+    String currency = 'IQD',
+    bool showSymbol = false,
+  }) {
+    final isNegative = amountCents < 0;
+    final absUnits = amountCents.abs() / 100.0;
+    final code = currency.toUpperCase();
+    final sign = isNegative ? '-' : '';
+
+    String? compactBody;
+    if (absUnits >= 1e9) {
+      compactBody = '${_trimCompact(absUnits / 1e9)}B';
+    } else if (absUnits >= 1e6) {
+      compactBody = '${_trimCompact(absUnits / 1e6)}M';
+    } else if (absUnits >= 1e3) {
+      compactBody = '${_trimCompact(absUnits / 1e3)}K';
+    }
+
+    if (compactBody == null) {
+      return format(amountCents, currency: currency, showSymbol: showSymbol);
+    }
+
+    if (!showSymbol) {
+      return '$sign$compactBody';
+    }
+
+    switch (code) {
+      case 'USD':
+        return '$sign\$$compactBody';
+      case 'EUR':
+        return '$sign€$compactBody';
+      case 'GBP':
+        return '$sign£$compactBody';
+      case 'JPY':
+        return '$sign¥$compactBody';
+      case 'CAD':
+        return '$sign\$$compactBody CAD';
+      default:
+        return '$sign$compactBody $code';
+    }
+  }
+
+  static String _trimCompact(double value) {
+    final fixed = value.toStringAsFixed(1);
+    return fixed.endsWith('.0') ? fixed.substring(0, fixed.length - 2) : fixed;
+  }
+
   /// Parses user text input into minor units (cents).
   static int parseToCents(String input) {
     final cleaned = input.replaceAll(',', '').trim();

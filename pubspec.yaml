@@ -4,7 +4,7 @@ publish_to: 'none'
 repository: https://github.com/voidness-x/Cash-IO
 issue_tracker: https://github.com/voidness-x/Cash-IO/issues
 
-version: 3.2.1+30201
+version: 3.3.0+30300
 
 environment:
   sdk: ^3.13.7

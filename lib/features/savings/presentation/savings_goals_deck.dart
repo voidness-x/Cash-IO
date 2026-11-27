@@ -164,7 +164,6 @@ class SavingsGoalsDeck extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: tokens.bgSurfaceElevated,
                           borderRadius: BorderRadius.circular(tokens.radiusSm),
-                          border: Border.all(color: tokens.borderHairline),
                         ),
                         child: Icon(goal.icon, color: tokens.statusIncome, size: 18),
                       ),
@@ -287,14 +286,13 @@ class SavingsGoalsDeck extends StatelessWidget {
           }),
         ],
 
-        // Spare-Change Round-Up Simulator Card
+        // Spare-Change Round-Up Simulator Card (borderless elevated surface)
         Container(
           key: const ValueKey('savings_roundups_card'),
           padding: EdgeInsets.all(tokens.space3),
           decoration: BoxDecoration(
             color: tokens.bgSurfaceElevated,
             borderRadius: BorderRadius.circular(tokens.radiusMd),
-            border: Border.all(color: tokens.borderHairline),
           ),
           child: Row(
             children: [

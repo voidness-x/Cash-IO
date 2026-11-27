@@ -200,6 +200,22 @@ class DatabaseHelper {
     );
   }
 
+  /// Atomically deletes a vault profile and all of its isolated ledger rows.
+  Future<void> deleteProfile(String profileId) async {
+    final db = await database;
+    await db.transaction((txn) async {
+      await txn.rawDelete(
+        'DELETE FROM postings WHERE transaction_id IN (SELECT id FROM transactions WHERE profile_id = ?)',
+        [profileId],
+      );
+      await txn.delete('transactions', where: 'profile_id = ?', whereArgs: [profileId]);
+      await txn.delete('envelopes', where: 'profile_id = ?', whereArgs: [profileId]);
+      await txn.delete('accounts', where: 'profile_id = ?', whereArgs: [profileId]);
+      await txn.delete('crdt_events', where: 'profile_id = ?', whereArgs: [profileId]);
+      await txn.delete('profiles', where: 'id = ?', whereArgs: [profileId]);
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Account Queries
   // ---------------------------------------------------------------------------

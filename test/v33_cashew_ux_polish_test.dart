@@ -281,9 +281,9 @@ void main() {
       );
       await tester.pump(const Duration(milliseconds: 400));
 
-      final oSize = tester.getSize(find.byKey(const ValueKey('center_dashboard_o_button')));
-      expect(oSize.width, lessThanOrEqualTo(52.0));
-      expect(oSize.height, lessThanOrEqualTo(52.0));
+      final homeSize = tester.getSize(find.byKey(const ValueKey('center_dashboard_o_button')));
+      expect(homeSize.height, lessThanOrEqualTo(62.0));
+      expect(find.text('Home'), findsOneWidget);
 
       // Switch tab mid-transition and verify smooth pop-up (ScaleTransition + FadeTransition, ZERO SlideTransition!)
       await tester.tap(find.byKey(const ValueKey('nav_tab_wallets')));

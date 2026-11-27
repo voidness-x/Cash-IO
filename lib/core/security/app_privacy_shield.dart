@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import '../theme/tokens.dart';
+import '../theme/theme_controller.dart';
 
 /// OS-level Privacy Shield Widget.
 /// Protects the application from OS task-switcher / recents snapshot scraping.
-/// When the user enters the multitasking view, switches apps, or locks the device,
-/// an opaque frosted shield is immediately rendered over the entire screen.
+/// Uses pure zero-network typography and dynamically matches the user's active
+/// theme preset/custom colors and Dark/Light appearance mode on the very first frame.
 class AppPrivacyShield extends StatefulWidget {
   final Widget child;
   final bool enabled;
@@ -84,68 +84,110 @@ class AppPrivacyShieldState extends State<AppPrivacyShield> with WidgetsBindingO
         widget.child,
         if (_isShieldVisible)
           Positioned.fill(
-            child: Material(
-              color: CashIOTokens.darkBg,
-              child: SafeArea(
-                child: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(CashIOTokens.space4),
-                        decoration: BoxDecoration(
-                          color: CashIOTokens.darkSurface,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: CashIOTokens.brand.withValues(alpha: 0.4),
-                            width: 1.5,
+            child: ListenableBuilder(
+              listenable: ThemeController.instance,
+              builder: (context, _) {
+                final ctrl = ThemeController.instance;
+                final platformBrightness = MediaQuery.maybePlatformBrightnessOf(context) ?? Brightness.dark;
+                final isDark = ctrl.themeMode == ThemeMode.dark ||
+                    (ctrl.themeMode == ThemeMode.system && platformBrightness == Brightness.dark);
+                final tokens = isDark ? ctrl.darkExtension : ctrl.lightExtension;
+
+                final wordmarkStyle = TextStyle(
+                  color: tokens.textPrimary,
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2.0,
+                  height: 1.0,
+                );
+
+                return Material(
+                  key: const ValueKey('privacy_shield_surface'),
+                  color: tokens.bgPrimary,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: const Alignment(0, -0.25),
+                        radius: 1.05,
+                        colors: [
+                          tokens.accentGold.withValues(alpha: isDark ? 0.14 : 0.10),
+                          tokens.bgPrimary,
+                        ],
+                      ),
+                    ),
+                    child: SafeArea(
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 28),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(18),
+                                decoration: BoxDecoration(
+                                  color: tokens.bgSurface,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: tokens.accentGold.withValues(alpha: 0.45),
+                                    width: 1.6,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: tokens.accentGold.withValues(alpha: 0.24),
+                                      blurRadius: 24,
+                                      spreadRadius: 2,
+                                    ),
+                                  ],
+                                ),
+                                child: Icon(
+                                  Icons.lock_rounded,
+                                  key: const ValueKey('privacy_shield_lock_icon'),
+                                  size: 36,
+                                  color: tokens.accentGold,
+                                ),
+                              ),
+                              const SizedBox(height: 22),
+                              Text.rich(
+                                key: const ValueKey('cashio_logo_wordmark'),
+                                TextSpan(
+                                  style: wordmarkStyle,
+                                  children: [
+                                    const TextSpan(text: 'CASH-I'),
+                                    TextSpan(
+                                      text: 'O',
+                                      style: wordmarkStyle.copyWith(color: tokens.accentGold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                'AIR-GAPPED PRIVACY SHIELD',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: tokens.accentGold,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Screen snapshot shielded from OS recents caching',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: tokens.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: CashIOTokens.brand.withValues(alpha: 0.20),
-                              blurRadius: 24,
-                              spreadRadius: 2,
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.lock_rounded,
-                          size: 36,
-                          color: CashIOTokens.brand,
                         ),
                       ),
-                      const SizedBox(height: CashIOTokens.space5),
-                      Text(
-                        'CASH-IO',
-                        style: TextStyle(
-                          color: CashIOTokens.darkTextHigh,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 2.0,
-                        ),
-                      ),
-                      const SizedBox(height: CashIOTokens.space2),
-                      Text(
-                        'AIR-GAPPED PRIVACY SHIELD',
-                        style: TextStyle(
-                          color: CashIOTokens.brand,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Screen snapshot shielded from OS recents caching',
-                        style: TextStyle(
-                          color: CashIOTokens.darkTextMedium,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
       ],

@@ -108,13 +108,12 @@ class FinancialAdvisoryCard extends StatelessWidget {
           ),
           SizedBox(height: tokens.space3),
 
-          // Runway & Solvency Quick Pill
+          // Runway & Solvency Quick Pill (surface elevation separates hierarchy — no redundant inner border)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
               color: tokens.bgSurfaceElevated,
               borderRadius: BorderRadius.circular(tokens.radiusSm),
-              border: Border.all(color: tokens.borderHairline),
             ),
             child: Row(
               children: [
@@ -147,7 +146,11 @@ class FinancialAdvisoryCard extends StatelessWidget {
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerRight,
                     child: Text(
-                      CurrencyUtils.format(runway.liquidAssetsCents, currency: repo.baseCurrency),
+                      CurrencyUtils.formatCompact(
+                        runway.liquidAssetsCents,
+                        currency: repo.baseCurrency,
+                        showSymbol: true,
+                      ),
                       style: GoogleFonts.jetBrainsMono(
                         color: tokens.textPrimary,
                         fontWeight: FontWeight.w700,
@@ -165,11 +168,8 @@ class FinancialAdvisoryCard extends StatelessWidget {
             Container(
               padding: EdgeInsets.all(tokens.space3),
               decoration: BoxDecoration(
-                color: _getSeverityColor(topSuggestion.severity, tokens).withValues(alpha: 0.08),
+                color: _getSeverityColor(topSuggestion.severity, tokens).withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(tokens.radiusSm),
-                border: Border.all(
-                  color: _getSeverityColor(topSuggestion.severity, tokens).withValues(alpha: 0.3),
-                ),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
